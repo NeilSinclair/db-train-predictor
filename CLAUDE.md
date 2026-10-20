@@ -27,7 +27,10 @@ The app has three parts:
 - Tests must not call the real DB API. Mock HTTP calls and use fixtures, so tests are fast, deterministic, and don't spend API quota.
 
 ### Google-style docstrings
-All Python modules, classes, and functions get [Google-style docstrings](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings):
+All Python modules, classes, and functions get [Google-style docstrings](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings).
+The one exception is test functions (`test_*`): their names describe what
+they test, so they don't need a docstring. Test modules, fixtures and
+helpers in test files still do.
 
 ```python
 def predict_delay(train_id: str, departure_time: datetime) -> DelayPrediction:
