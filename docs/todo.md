@@ -6,8 +6,9 @@ Tick items off as they're done; record any decisions they need in
 
 **Where we left off (2026-10-20):** steps 1–4 are done: the collector
 runs 24/7 in Docker on the Hetzner VPS since 2026-10-20 ~20:52 (D16,
-[deployment.md](deployment.md)). **Next: nightly backup to the Hetzner
-Storage Box**, then the checks under "After it has run for a while".
+[deployment.md](deployment.md)); restarts are cheap since D18. **Next:
+the prediction API (D20, 2026-10-21)** and the nightly backup to the
+Hetzner Storage Box, then the checks under "After it has run for a while".
 
 ## Done 2026-10-20 (from the code review)
 
@@ -75,6 +76,10 @@ Storage Box**, then the checks under "After it has run for a while".
 - [x] Collector started with `docker compose up -d`.
 - [x] Committed and pushed; `/opt/db-ml` on the VPS is a plain checkout of
   `main` again (the changes had first been copied over uncommitted).
+- [x] Restarts are cheap: fetched plan hours are kept in `plan_fetches`
+  (migration 2, D18).
+- [x] D18 deployed to the VPS (one last full plan backfill, since earlier
+  fetches weren't recorded).
 - [ ] **Nightly backup to the Hetzner Storage Box.** Use SQLite's online
   backup (`sqlite3 <db> ".backup <file>"`), which is safe while the
   collector writes; copying the file directly isn't, in WAL mode. Keep a
@@ -90,6 +95,13 @@ Storage Box**, then the checks under "After it has run for a while".
 - [ ] The deleted-message (`del`) check from step 3's list, on real data.
 
 ### Later
+- [ ] Decide where the prediction API runs (D20), planned for 2026-10-21.
+- [ ] Set up training as in D19: `model/` workspace member, `trainer`
+  compose service with a profile and CPU/memory limits, trained from the
+  nightly backup copy.
+- [ ] Copy only what the collector needs into its image (an allowlist in
+  `.dockerignore`) plus a build-time `import db_ml.collector` check, once
+  the repo holds model or frontend code.
 - [ ] Journey builder: derive `journeys` from `stops` (D7).
 - [ ] Find DB's list of message codes (e.g. code 55 on ICE 372).
 - [ ] Delay prediction model.

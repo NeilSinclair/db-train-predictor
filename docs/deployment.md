@@ -32,8 +32,11 @@ sqlite3 -readonly /var/lib/db-ml/db_ml.sqlite "SELECT COUNT(*) FROM stops"
 
 `sqlite3` needs root, or a user in group 10001, to read the data folder.
 
-After a (re)start the plan backfill takes about 70 minutes and the first
-`/fchg` waits for it (D15). That's expected.
+A restart costs only the few seconds of downtime: the collector remembers
+which plan hours it fetched (D18) and fetches only the ones it missed, so
+the `/fchg` catch-up runs within a minute or two. The startup log line says
+how many plan hours were fetched before. Only a new database, or downtime
+of many hours, means the full ~70-minute plan backfill (D15).
 
 ## Deploying a new version
 

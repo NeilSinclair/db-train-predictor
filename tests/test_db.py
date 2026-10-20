@@ -1,6 +1,7 @@
 """Tests for the SQLite storage module."""
 
 import sqlite3
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -9,7 +10,9 @@ from db_ml.db import (
     collected_evas,
     connect,
     database_path,
+    fetched_plan_hours,
     init_db,
+    record_plan_fetch,
     schema_version,
     sync_station_evas,
     upsert_stations,
@@ -73,10 +76,10 @@ def test_database_path_defaults_and_can_be_overridden(monkeypatch):
 
 
 def test_new_database_starts_on_the_latest_schema_version(conn):
-    assert schema_version(conn) == len(MIGRATIONS) == 1
+    assert schema_version(conn) == len(MIGRATIONS) == 2
 
 
-def test_database_from_before_migrations_is_marked_version_1_without_losing_data():
+def test_database_from_before_migrations_is_upgraded_without_losing_data():
     connection = connect(":memory:")
     connection.executescript(MIGRATIONS[0])
     upsert_stations(connection, [BERLIN])
@@ -84,7 +87,7 @@ def test_database_from_before_migrations_is_marked_version_1_without_losing_data
 
     init_db(connection)
 
-    assert schema_version(connection) == 1
+    assert schema_version(connection) == len(MIGRATIONS)
     assert connection.execute("SELECT COUNT(*) FROM stations").fetchone()[0] == 1
 
 
@@ -95,7 +98,7 @@ def test_init_db_applies_only_pending_migrations(conn):
     init_db(conn, migrations)
     init_db(conn, migrations)
 
-    assert schema_version(conn) == 2
+    assert schema_version(conn) == len(migrations)
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(stations)")}
     assert "state" in columns
     assert conn.execute("SELECT COUNT(*) FROM stations").fetchone()[0] == 1
@@ -107,7 +110,7 @@ def test_failed_migration_is_rolled_back(conn):
     with pytest.raises(sqlite3.OperationalError):
         init_db(conn, [*MIGRATIONS, broken])
 
-    assert schema_version(conn) == 1
+    assert schema_version(conn) == len(MIGRATIONS)
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(stations)")}
     assert "state" not in columns
 
@@ -115,7 +118,7 @@ def test_failed_migration_is_rolled_back(conn):
 def test_init_db_refuses_a_database_newer_than_the_code(conn):
     conn.execute(f"PRAGMA user_version = {len(MIGRATIONS) + 1}")
 
-    with pytest.raises(RuntimeError, match="schema version 2"):
+    with pytest.raises(RuntimeError, match=f"schema version {len(MIGRATIONS) + 1}"):
         init_db(conn)
 
 
@@ -125,7 +128,9 @@ def test_init_db_creates_collector_tables_and_is_repeatable(conn):
     tables = {
         row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
-    assert tables == {"stations", "station_evas", "stops", "stop_changes", "stop_messages"}
+    assert tables == {
+        "stations", "station_evas", "stops", "stop_changes", "stop_messages", "plan_fetches",
+    }
 
 
 def test_upsert_stations_inserts_then_updates(conn):
@@ -192,3 +197,17 @@ def test_stops_reject_unknown_eva(conn):
                     '2026-10-20T18:00:00+02:00', '2026-10-20T18:00:00+02:00')
             """
         )
+
+
+def test_record_plan_fetch_and_look_it_up(conn):
+    upsert_stations(conn, [BERLIN])
+    sync_station_evas(conn, [berlin_eva(8098160, True)])
+    first = datetime(2026, 10, 20, 18, 0, tzinfo=UTC)
+
+    record_plan_fetch(conn, 8098160, "26102020", first)
+    record_plan_fetch(conn, 8098160, "26102020", first + timedelta(minutes=5))
+    record_plan_fetch(conn, 8098160, "26102021", first)
+
+    assert fetched_plan_hours(conn, {"26102020", "26102022"}) == {(8098160, "26102020")}
+    row = conn.execute("SELECT fetched_at FROM plan_fetches WHERE hour_label = '26102020'").fetchone()
+    assert row["fetched_at"] == "2026-10-20T18:05:00+00:00"

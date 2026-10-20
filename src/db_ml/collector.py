@@ -44,7 +44,9 @@ from db_ml.db import (
     collected_evas,
     connect,
     database_path,
+    fetched_plan_hours,
     init_db,
+    record_plan_fetch,
     save_changes,
     save_plan,
 )
@@ -301,17 +303,42 @@ class Collector:
         """Queues the startup work.
 
         ``/rchg`` polls are spread evenly over the first 90 seconds so they
-        don't all fall due at once. Then the plan window is filled. ``/fchg``
-        is queued last; as the lowest priority it runs once the plans are
-        fetched, so its changes have stops to attach to.
+        don't all fall due at once. Then the plan window is filled, skipping
+        hours fetched before a restart (D18). ``/fchg`` is queued last; as
+        the lowest priority it runs once the plans are fetched, so its
+        changes have stops to attach to. After a short restart that's
+        within a minute or two.
         """
         now = self._now()
         spacing = RCHG_INTERVAL / max(len(self._evas), 1)
         for i, eva in enumerate(self._evas):
             self._add(Kind.RCHG, eva, now + spacing * i)
+        already = self._load_fetched_plans(now)
         self._update_plan_window(now)
+        logger.info(
+            "%d plan hours in the window were fetched before; %d to fetch",
+            already, self.pending(Kind.PLAN),
+        )
         for eva in self._evas:
             self._add(Kind.FCHG, eva, now)
+
+    def _load_fetched_plans(self, now: datetime) -> int:
+        """Marks the window's plan hours that are already in the database.
+
+        Args:
+            now: The current time.
+
+        Returns:
+            How many (EVA, hour) pairs were marked.
+        """
+        hours = [floor_hour(now) + timedelta(hours=offset) for offset in plan_offsets()]
+        done = fetched_plan_hours(self._conn, {local_hour_label(hour) for hour in hours})
+        for hour in hours:
+            for eva in self._evas:
+                key = (eva, local_hour_label(hour))
+                if key in done:
+                    self._planned.setdefault(key, hour)
+        return len(self._planned)
 
     def _update_plan_window(self, now: datetime) -> None:
         """Queues plans for every hour in the window that isn't done yet.
@@ -402,9 +429,15 @@ class Collector:
         fetched_at = self._now()
         if task.kind is Kind.PLAN:
             content = fetch_plan_xml(self._client, task.eva, task.hour, **RETRY_OPTIONS)
-            if content is None:
-                return SaveResult()
-            return save_plan(self._conn, parse_timetable(content, task.eva, fetched_at), fetched_at)
+            # An hour the API rejects (None) is done too: asking again won't help.
+            result = (
+                SaveResult() if content is None
+                else save_plan(self._conn, parse_timetable(content, task.eva, fetched_at), fetched_at)
+            )
+            # Recorded after the stops are saved, so a crash in between means
+            # fetching the hour again, never skipping it.
+            record_plan_fetch(self._conn, task.eva, local_hour_label(task.hour), fetched_at)
+            return result
         recent = task.kind is Kind.RCHG
         content = fetch_changes_xml(self._client, task.eva, recent=recent, **RETRY_OPTIONS)
         if content is None:

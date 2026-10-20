@@ -297,3 +297,50 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
 - **Consequences:** The VPS database started on version 1. A database from
   before migrations (version 0) becomes version 1 without changes, since
   version 1 only uses `CREATE ... IF NOT EXISTS`.
+
+## D18. Remember fetched `/plan` hours in the database
+- **Date:** 2026-10-20
+- **Status:** Accepted. Changes D15's restart behaviour.
+- **Context:** The collector kept the list of fetched plan hours in memory
+  only, so every restart fetched all 17 hours × 63 EVAs (~1,070 requests,
+  ~70 minutes) again, and the `/fchg` catch-up waited behind them. We expect
+  many restarts while building the project; restarting more often than
+  every 70 minutes would have kept `/fchg` from ever running.
+- **Decision:** New table `plan_fetches (eva, hour_label, fetched_at)`,
+  added by migration 2 (D17). A plan hour is recorded once its stops are
+  saved, or when the API rejects it (400/404, which a retry won't change).
+  Failed fetches aren't recorded, so they're retried as before. At startup
+  the collector skips hours already recorded.
+- **Consequences:** A short restart fetches only the hours it missed, and
+  `/fchg` catches up within a minute or two. A restart now costs the few
+  seconds of downtime, which `/rchg`'s 2-minute window covers. The table
+  grows by ~550k small rows a year. The first start after this change still
+  fetches everything once, since earlier fetches weren't recorded.
+
+## D19. Model training in its own package and container on the VPS
+- **Date:** 2026-10-20
+- **Status:** Accepted (no training code yet)
+- **Context:** The model will be trained on the VPS; the frontend will be
+  hosted elsewhere. The VPS has 2 vCPUs and 4 GB of RAM, ~1.8 GB of which
+  other services already use, and the collector must never be starved.
+- **Decision:** Train on the VPS, set up like this:
+  - Training code in its own uv workspace member (e.g. `model/` with its
+    own `pyproject.toml`), importing `db_ml` for shared database code. The
+    heavy ML dependencies stay out of the collector image.
+  - Its own image and a `trainer` service in `compose.yaml` with a compose
+    profile, so `docker compose up -d` doesn't start it; run on demand with
+    `docker compose run --rm trainer`. CPU and memory limits (e.g. 1 CPU,
+    1.5 GB) so training can't take the collector or the other services down.
+  - Train from the nightly backup copy, not the live database: a long read
+    transaction on the live database stops WAL checkpoints, so the WAL file
+    grows while training runs.
+- **Consequences:** Where the prediction API runs is still open (D20).
+
+## D20. Where the prediction API runs
+- **Date:** 2026-10-20
+- **Status:** Open (to discuss on 2026-10-21)
+- **Context:** The frontend will be hosted elsewhere, not on the VPS (D19).
+  The prediction API needs the trained model and live delays from the
+  collector's database.
+- **Leaning:** on the VPS, as its own compose service behind HTTPS, called
+  by the frontend from wherever that's hosted.

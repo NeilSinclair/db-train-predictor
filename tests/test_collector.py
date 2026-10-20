@@ -415,6 +415,50 @@ def test_plan_hour_repeated_by_the_clock_change_is_fetched_once(conn, api):
     assert len(plan_paths) == len(set(plan_paths))
 
 
+def test_restart_skips_plan_hours_fetched_before(conn, api, clock):
+    first = make_collector(conn, api, clock, evas=[FRANKFURT])
+    run_tasks(first, clock, PLAN_HOURS + 2)
+
+    clock.current += timedelta(minutes=2)  # restarted in the same hour
+    second = make_collector(conn, api, clock, evas=[FRANKFURT])
+
+    assert second.pending(Kind.PLAN) == 0
+    # So the /fchg catch-up runs straight after the first /rchg.
+    assert [t.kind for t in run_tasks(second, clock, 2)] == [Kind.RCHG, Kind.FCHG]
+
+
+def test_restart_fetches_only_the_plan_hours_it_missed(conn, api, clock):
+    first = make_collector(conn, api, clock, evas=[FRANKFURT])
+    run_tasks(first, clock, 4)  # rchg and three plan hours
+
+    second = make_collector(conn, api, clock, evas=[FRANKFURT, BERLIN_HBF])
+
+    queued = {(t.eva, t.hour) for t in second._queues[Kind.PLAN]}
+    fetched = {(FRANKFURT, floor_hour(START) + timedelta(hours=h)) for h in (0, 1, 2)}
+    assert len(queued) == 2 * PLAN_HOURS - 3
+    assert not queued & fetched
+
+
+def test_plan_hour_rejected_by_the_api_counts_as_fetched(conn, api, clock):
+    api.fail[f"/plan/{FRANKFURT}/261020/20"] = 404
+    collector = make_collector(conn, api, clock, evas=[FRANKFURT])
+
+    run_tasks(collector, clock, 2)
+
+    labels = {row["hour_label"] for row in conn.execute("SELECT hour_label FROM plan_fetches")}
+    assert "26102020" in labels
+
+
+def test_failed_plan_hour_is_not_recorded_as_fetched(conn, api, clock):
+    api.fail[f"/plan/{FRANKFURT}/261020/20"] = 401
+    collector = make_collector(conn, api, clock, evas=[FRANKFURT])
+
+    run_tasks(collector, clock, 3)  # rchg, the failing plan, the next plan
+
+    labels = {row["hour_label"] for row in conn.execute("SELECT hour_label FROM plan_fetches")}
+    assert labels == {"26102021"}
+
+
 def test_local_hour_label():
     assert local_hour_label(datetime(2026, 10, 20, 18, tzinfo=UTC)) == "26102020"
     assert local_hour_label(datetime(2026, 10, 25, 0, tzinfo=UTC)) == "26102502"

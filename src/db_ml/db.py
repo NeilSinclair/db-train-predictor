@@ -103,10 +103,22 @@ CREATE TABLE IF NOT EXISTS stop_messages (
 );
 """
 
+# Which /plan hours have been fetched, so a restarted collector only fetches
+# the ones it missed (D18). hour_label is the German local hour as in the
+# /plan URL (YYMMDDHH), which is also how the collector tells hours apart.
+SCHEMA_V2 = """
+CREATE TABLE plan_fetches (
+    eva        INTEGER NOT NULL REFERENCES station_evas (eva),
+    hour_label TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (eva, hour_label)
+);
+"""
+
 # Schema migrations in order: entry N takes the database from version N to
 # N + 1, tracked in SQLite's ``PRAGMA user_version``. Only ever append; never
 # edit a migration that has run on a real database.
-MIGRATIONS = [SCHEMA_V1]
+MIGRATIONS = [SCHEMA_V1, SCHEMA_V2]
 
 
 def database_path() -> Path:
@@ -387,6 +399,46 @@ def save_plan(conn: sqlite3.Connection, stops: list[Stop], observed_at: datetime
     with conn:
         conn.executemany(UPSERT_STOP, rows)
     return SaveResult(saved=len(rows), skipped=len(stops) - len(rows))
+
+
+def record_plan_fetch(
+    conn: sqlite3.Connection, eva: int, hour_label: str, fetched_at: datetime
+) -> None:
+    """Notes that a ``/plan`` hour has been fetched.
+
+    Args:
+        conn: An open database connection.
+        eva: The EVA number.
+        hour_label: The German local hour as ``YYMMDDHH``.
+        fetched_at: When it was fetched. A later fetch of the same hour
+            overwrites it.
+    """
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO plan_fetches (eva, hour_label, fetched_at) VALUES (?, ?, ?)
+            ON CONFLICT (eva, hour_label) DO UPDATE SET fetched_at = excluded.fetched_at
+            """,
+            (eva, hour_label, _iso(fetched_at)),
+        )
+
+
+def fetched_plan_hours(conn: sqlite3.Connection, hour_labels: set[str]) -> set[tuple[int, str]]:
+    """Looks up which of the given ``/plan`` hours have been fetched.
+
+    Args:
+        conn: An open database connection.
+        hour_labels: German local hours as ``YYMMDDHH``.
+
+    Returns:
+        (EVA, hour label) pairs fetched before, for any EVA.
+    """
+    labels = sorted(hour_labels)
+    placeholders = ", ".join("?" for _ in labels)
+    rows = conn.execute(
+        f"SELECT eva, hour_label FROM plan_fetches WHERE hour_label IN ({placeholders})", labels
+    )
+    return {(row["eva"], row["hour_label"]) for row in rows}
 
 
 def _last_snapshot(conn: sqlite3.Connection, stop_id: str) -> tuple | None:
