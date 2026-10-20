@@ -5,10 +5,12 @@ import sqlite3
 import pytest
 
 from db_ml.db import (
+    MIGRATIONS,
     collected_evas,
     connect,
     database_path,
     init_db,
+    schema_version,
     sync_station_evas,
     upsert_stations,
 )
@@ -68,6 +70,53 @@ def test_database_path_defaults_and_can_be_overridden(monkeypatch):
 
     monkeypatch.setenv("DB_ML_DATABASE_PATH", "/var/lib/db-ml/db.sqlite")
     assert str(database_path()) == "/var/lib/db-ml/db.sqlite"
+
+
+def test_new_database_starts_on_the_latest_schema_version(conn):
+    assert schema_version(conn) == len(MIGRATIONS) == 1
+
+
+def test_database_from_before_migrations_is_marked_version_1_without_losing_data():
+    connection = connect(":memory:")
+    connection.executescript(MIGRATIONS[0])
+    upsert_stations(connection, [BERLIN])
+    assert schema_version(connection) == 0
+
+    init_db(connection)
+
+    assert schema_version(connection) == 1
+    assert connection.execute("SELECT COUNT(*) FROM stations").fetchone()[0] == 1
+
+
+def test_init_db_applies_only_pending_migrations(conn):
+    upsert_stations(conn, [BERLIN])
+    migrations = [*MIGRATIONS, "ALTER TABLE stations ADD COLUMN state TEXT;"]
+
+    init_db(conn, migrations)
+    init_db(conn, migrations)
+
+    assert schema_version(conn) == 2
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(stations)")}
+    assert "state" in columns
+    assert conn.execute("SELECT COUNT(*) FROM stations").fetchone()[0] == 1
+
+
+def test_failed_migration_is_rolled_back(conn):
+    broken = "ALTER TABLE stations ADD COLUMN state TEXT; ALTER TABLE no_such_table ADD COLUMN x;"
+
+    with pytest.raises(sqlite3.OperationalError):
+        init_db(conn, [*MIGRATIONS, broken])
+
+    assert schema_version(conn) == 1
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(stations)")}
+    assert "state" not in columns
+
+
+def test_init_db_refuses_a_database_newer_than_the_code(conn):
+    conn.execute(f"PRAGMA user_version = {len(MIGRATIONS) + 1}")
+
+    with pytest.raises(RuntimeError, match="schema version 2"):
+        init_db(conn)
 
 
 def test_init_db_creates_collector_tables_and_is_repeatable(conn):

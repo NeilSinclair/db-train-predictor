@@ -32,7 +32,10 @@ DEFAULT_DATABASE_PATH = Path("data/db_ml.sqlite")
 TOP_STATIONS_PATH = Path("data/processed/top_stations.json")
 STATION_EVAS_PATH = Path("data/processed/station_evas.json")
 
-SCHEMA = """
+# Version 1 is the schema as it stood before the first deployment. Its
+# IF NOT EXISTS clauses let databases created before migrations existed
+# (user_version 0) be marked as version 1 without changes.
+SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS stations (
     station_number    INTEGER PRIMARY KEY,
     name              TEXT NOT NULL,
@@ -100,6 +103,11 @@ CREATE TABLE IF NOT EXISTS stop_messages (
 );
 """
 
+# Schema migrations in order: entry N takes the database from version N to
+# N + 1, tracked in SQLite's ``PRAGMA user_version``. Only ever append; never
+# edit a migration that has run on a real database.
+MIGRATIONS = [SCHEMA_V1]
+
 
 def database_path() -> Path:
     """Returns where the database lives.
@@ -132,13 +140,45 @@ def connect(path: Path | str) -> sqlite3.Connection:
     return conn
 
 
-def init_db(conn: sqlite3.Connection) -> None:
-    """Creates any tables and indexes that don't exist yet.
+def schema_version(conn: sqlite3.Connection) -> int:
+    """Reads which migration the database is at.
 
     Args:
         conn: An open database connection.
+
+    Returns:
+        The database's ``user_version``: 0 for a new database, otherwise
+        the number of migrations applied.
     """
-    conn.executescript(SCHEMA)
+    return conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+def init_db(conn: sqlite3.Connection, migrations: list[str] = MIGRATIONS) -> None:
+    """Brings the schema up to date by applying any pending migrations.
+
+    Each migration runs in its own transaction together with the version
+    bump, so a failing migration leaves the database at the version before.
+
+    Args:
+        conn: An open database connection.
+        migrations: The migration scripts, in order. Tests pass their own.
+
+    Raises:
+        RuntimeError: If the database is newer than this code, e.g. after
+            rolling back a deployment.
+        sqlite3.Error: If a migration fails; it is rolled back.
+    """
+    version = schema_version(conn)
+    if version > len(migrations):
+        raise RuntimeError(
+            f"Database is at schema version {version}, but this code only knows {len(migrations)}"
+        )
+    for number, script in enumerate(migrations[version:], start=version + 1):
+        try:
+            conn.executescript(f"BEGIN;\n{script}\nPRAGMA user_version = {number};\nCOMMIT;")
+        except sqlite3.Error:
+            conn.rollback()
+            raise
 
 
 def upsert_stations(conn: sqlite3.Connection, stations: list[dict[str, Any]]) -> None:
