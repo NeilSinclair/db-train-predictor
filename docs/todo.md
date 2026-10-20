@@ -4,6 +4,11 @@ What's left to build, plus findings from the code review of 2026-10-20.
 Tick items off as they're done; record any decisions they need in
 [decisions.md](decisions.md).
 
+**Where we left off (2026-10-20):** steps 1–3 are done and pushed: the
+collector runs locally with `uv run db-ml-collector`. **Next is step 4:
+deploying to the Hetzner VPS**, continued from a laptop that can reach the
+VPS. See the step 4 section below for the full plan.
+
 ## Done 2026-10-20 (from the code review)
 
 - [x] **`clean_stations.py` in line with CLAUDE.md:** docstrings, and it uses
@@ -60,14 +65,58 @@ Tick items off as they're done; record any decisions they need in
   seen in 700+ sampled stops). If they occur, store the flag and update the
   message instead of `INSERT OR IGNORE` (code review, 2026-10-20).
 
-### Step 4: Deploy to the Hetzner VPS
-- [ ] Service that restarts on failure (systemd), `.env` on the server,
-  database path via `DB_ML_DATABASE_PATH`.
-- [ ] A way to change the schema once real data exists (simple numbered
-  migrations), since recreating the database won't be an option then.
-- [ ] Nightly backup off the VPS (Hetzner Storage Box or local machine).
+### Step 4: Deploy to the Hetzner VPS (next)
+
+**Not in git, so not on a fresh clone:**
+- `.env` (API credentials: `DB_CLIENT_ID`, `DB_API_KEY`,
+  `DB_STATIONS_ENDPOINT`, `DB_TIMETABLES_ENDPOINT`). Copy it to the VPS by
+  hand (e.g. `scp`), never through git, and `chmod 600` it.
+- `data/` (station files and the database). Don't copy the old laptop's
+  `data/db_ml.sqlite`: it only holds test runs from 2026-10-20. Rebuild the
+  reference data on the VPS instead (below).
+
+**Before the first real collection run:**
+- [ ] **Schema migrations.** Once real data exists, the database can't just
+  be recreated (as it was during steps 1–3). Add simple numbered migrations,
+  e.g. tracked with SQLite's `PRAGMA user_version`, with the current schema
+  as version 1. Do this first, so the VPS database starts on version 1.
+
+**On the VPS:**
+- [ ] Install uv, clone the repo, `uv sync` (uv installs Python 3.13 from
+  `.python-version` if needed).
+- [ ] Copy `.env` over. Pick a database location outside the repo, e.g.
+  `/var/lib/db-ml/db_ml.sqlite`, and set `DB_ML_DATABASE_PATH` to it.
+- [ ] Build the reference data. Takes about 5 minutes; the last two steps
+  call the Timetables API:
+  ```
+  uv run python -m db_ml.stations
+  uv run python -m db_ml.clean_stations
+  uv run python -m db_ml.city_populations
+  uv run python -m db_ml.top_stations
+  uv run python -m db_ml.station_evas
+  uv run python -m db_ml.db
+  ```
+  Expect 61 stations and 63 EVA numbers to collect.
+- [ ] systemd service: `ExecStart` running `uv run db-ml-collector` (use
+  uv's absolute path), `WorkingDirectory` = the repo, `EnvironmentFile` =
+  the `.env`, `Restart=always`, `RestartSec=30`, a dedicated user. It stops
+  cleanly on SIGTERM within about a second.
+- [ ] Check the logs (`journalctl -u <service>`): a summary line every
+  5 minutes. After a (re)start, the plan backfill takes about 70 minutes
+  and the first `/fchg` waits for it (D15). That's expected.
+- [ ] Nightly backup off the VPS (Hetzner Storage Box or a local machine).
+  Use SQLite's online backup (`sqlite3 <db> ".backup <file>"`), which is
+  safe while the collector writes; copying the file directly isn't, in WAL
+  mode.
+
+**After it has run for a while:**
 - [ ] After day one, measure database growth against the ~10 GB/year
-  estimate (D11) and check free disk space.
+  estimate (D11) and check free disk space. The 5-minute live run stored
+  ~700 snapshots, but that was inflated by first-time snapshots.
+- [ ] **Clock change, night of 24/25 Oct 2026:** check that night's data
+  against the rules in D14 (forecasts in the repeated 02:00 hour,
+  departures after arrivals, one `/plan` fetch for local 02:00).
+- [ ] The deleted-message (`del`) check from step 3's list, on real data.
 
 ### Later
 - [ ] Journey builder: derive `journeys` from `stops` (D7).
