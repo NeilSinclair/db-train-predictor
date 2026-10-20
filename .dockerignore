@@ -1,0 +1,12 @@
+# Secrets come in at runtime through compose's env_file, never in the image.
+.env
+.env.*
+
+.git/
+.venv/
+data/
+docs/
+tests/
+**/__pycache__/
+.pytest_cache/
+.DS_Store

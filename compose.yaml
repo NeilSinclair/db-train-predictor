@@ -1,0 +1,20 @@
+# Runs the collector 24/7. See docs/deployment.md.
+services:
+  collector:
+    build: .
+    image: db-ml
+    restart: unless-stopped
+    # DB_CLIENT_ID, DB_API_KEY, DB_STATIONS_ENDPOINT, DB_TIMETABLES_ENDPOINT.
+    env_file: .env
+    environment:
+      DB_ML_DATABASE_PATH: /app/data/db_ml.sqlite
+    volumes:
+      # Reference data (data/raw, data/processed) and the database.
+      - ${DB_ML_DATA_DIR:-/var/lib/db-ml}:/app/data
+    # The collector stops within about a second of SIGTERM (D15).
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"

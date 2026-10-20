@@ -261,3 +261,39 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
   response time median 0.04 s, max 0.15 s; 231 `/rchg` polls at most 1 s
   late. The startup backfill runs at ~15 plan fetches a minute alongside
   `/rchg`, so it takes ~70 minutes, and the first `/fchg` waits for it.
+
+## D16. Run the collector in Docker Compose on the VPS
+- **Date:** 2026-10-20
+- **Status:** Accepted. Replaces the systemd service planned in todo.md's
+  step 4 (that plan was never a numbered decision).
+- **Context:** The VPS (Ubuntu 24.04, ARM64, 4 GB) already runs other
+  services (`mybot`, `openclaw-gateway`). It had no Docker and no uv.
+- **Decision:** One `collector` service in `compose.yaml`, built from the
+  repo's `Dockerfile` (`python:3.13-slim` + uv, locked dependencies) on the
+  VPS itself, so it's native ARM64. `restart: unless-stopped`; credentials
+  through `env_file: .env`; logs rotated at 5 × 10 MB. Code lives in the
+  image; reference data and the database live in `/var/lib/db-ml`, mounted
+  at `/app/data`, so the relative `data/...` paths keep working. The
+  container runs as UID/GID 10001, which owns the data folder.
+- **Why:** Keeps the collector's Python and dependencies separate from
+  what's already on the VPS, and makes a redeploy one command
+  (`docker compose up -d --build`). The image has the time zone data that
+  the clock-change rules (D14) rely on (checked).
+- **Consequences:** Runbook in [deployment.md](deployment.md). The
+  reference-data pipeline runs in the same image
+  (`docker compose run --rm collector ...`).
+
+## D17. Schema migrations with `PRAGMA user_version`
+- **Date:** 2026-10-20
+- **Status:** Accepted
+- **Context:** Once real data is collected, the database can't be recreated
+  for a schema change, as it was during steps 1–3 (D13).
+- **Decision:** `db.MIGRATIONS` is an ordered list of SQL scripts; the
+  database's `user_version` says how many have run. `init_db` applies the
+  pending ones at startup, each in one transaction with its version bump,
+  and refuses to open a database newer than the code. The schema as of the
+  first deployment is version 1. Migrations are only ever appended, never
+  edited.
+- **Consequences:** The VPS database started on version 1. A database from
+  before migrations (version 0) becomes version 1 without changes, since
+  version 1 only uses `CREATE ... IF NOT EXISTS`.
