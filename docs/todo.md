@@ -4,15 +4,11 @@ What's left to build, plus findings from the code review of 2026-10-20.
 Tick items off as they're done; record any decisions they need in
 [decisions.md](decisions.md).
 
-## Needs a decision
-
-- [ ] **`clean_stations.py`** was written by hand outside these sessions. It
-  still has no module docstring, no docstring on `main`, and opens files
-  without `encoding="utf-8"`. (`is_main_station` now has a docstring and
-  tests.) Bring the rest in line with CLAUDE.md, or leave it as is?
-
 ## Done 2026-10-20 (from the code review)
 
+- [x] **`clean_stations.py` in line with CLAUDE.md:** docstrings, and it uses
+  the shared `files.py` helpers, so it reads and writes UTF-8 and the output
+  keeps umlauts readable. Output data unchanged.
 - [x] **Leverkusen added** by name (D12). It ranks #49 and Heilbronn drops
   out. Its one EVA had 16 trains in the two sample hours, none of them S-Bahn.
 - [x] **One shared API client with retries** (`api.py`): retries 429, 5xx
@@ -32,32 +28,41 @@ Tick items off as they're done; record any decisions they need in
 
 ## Next steps
 
-### Step 2: Turn Timetables XML into rows
-- [ ] Try `/rchg` against the real API (not tested yet; the request budget in
-  D10 depends on it).
-- [ ] Parse `/plan`, `/fchg` and `/rchg` into `stops`, `stop_changes` and
-  `stop_messages` rows. Test against the real XML saved on 2026-10-20.
-- [ ] Convert `YYMMDDHHmm` (German local time) to ISO 8601 with UTC offset.
-  Test the clock change on 25 Oct 2026, when 02:00–03:00 happens twice.
-- [ ] Handle changes that arrive for stops we have no `/plan` row for yet
-  (the foreign key will reject them), and trains added at short notice,
-  which carry their full details in the change feed.
-- [ ] Parse cancellations (`cs="c"`) and coupled trains (`wings` →
-  `coupled_with`).
-- [ ] Skip trains with category `S` (D8).
+### Step 2: Turn Timetables XML into rows (done 2026-10-20, see D13)
+- [x] Tried `/rchg` against the real API: works; each entry is the stop's
+  full current state, same as `/fchg`.
+- [x] Parse `/plan`, `/fchg` and `/rchg` (`timetable_xml.py`) and store them
+  (`db.save_plan`, `db.save_changes`). Tested against real Frankfurt XML in
+  `tests/fixtures/`.
+- [x] Times converted to ISO 8601 with UTC offset; the repeated hour on
+  25 Oct 2026 is tested.
+- [x] Changes for unknown stops: created if the entry has full train details,
+  otherwise skipped until the `/plan` row exists.
+- [x] Cancellations, reinstated trains, coupled trains (`coupled_with`).
+- [x] S-Bahn trains skipped.
+- [x] `stop_changes` row only when the state differs from the last one
+  (built here rather than in step 3).
+- [x] Live run on Frankfurt, Berlin and München: 292 stops, 282 snapshots,
+  696 messages; a follow-up `/rchg` added only the stops that changed.
 
 ### Step 3: Collector loop
-- [ ] Polling schedule: `/plan` hourly for the next few hours, `/rchg` every
-  ~90 s per EVA, `/fchg` hourly as a catch-up. Decide how many hours ahead
-  to fetch.
+- [ ] Polling schedule: `/plan` hourly for the next 4+ hours (`/fchg` reaches
+  a few hours ahead), `/rchg` every ~90 s per EVA, `/fchg` hourly as a
+  catch-up.
+- [ ] At startup, also fetch `/plan` for today's past hours: `/fchg` reaches
+  back 8–12 hours, and those changes need a stop to attach to.
 - [ ] One rate limiter shared by all requests (60/minute).
-- [ ] Write a `stop_changes` row only when something differs from the last
-  one.
 - [ ] Logging, and recovery after a restart (catch up with `/fchg`).
+
+- [ ] Check real data for messages flagged as deleted (`del` attribute, not
+  seen in 700+ sampled stops). If they occur, store the flag and update the
+  message instead of `INSERT OR IGNORE` (code review, 2026-10-20).
 
 ### Step 4: Deploy to the Hetzner VPS
 - [ ] Service that restarts on failure (systemd), `.env` on the server,
   database path via `DB_ML_DATABASE_PATH`.
+- [ ] A way to change the schema once real data exists (simple numbered
+  migrations), since recreating the database won't be an option then.
 - [ ] Nightly backup off the VPS (Hetzner Storage Box or local machine).
 - [ ] After day one, measure database growth against the ~10 GB/year
   estimate (D11) and check free disk space.

@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from db_ml.files import load_json, save_json
+from db_ml.timetable_xml import S_BAHN_CATEGORY
 from db_ml.timetables import (
     MIN_SECONDS_BETWEEN_REQUESTS,
     build_client,
@@ -35,7 +36,6 @@ from db_ml.timetables import (
 STATIONS_PATH = Path("data/raw/stations_clean.json")
 TOP_STATIONS_PATH = Path("data/processed/top_stations.json")
 DEFAULT_OUTPUT_PATH = Path("data/processed/station_evas.json")
-S_BAHN_CATEGORY = "S"
 # EVAs where at least this share of trains is S-Bahn count as S-Bahn only.
 S_BAHN_ONLY_SHARE = 0.9
 # A morning and an evening peak, so one quiet hour can't drop an EVA.

@@ -167,3 +167,58 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
 - **Consequences:** Leverkusen ranks #49. Heilbronn (#60 before) drops out;
   its EVA stays in the database with `collect = 0`. Still 61 stations and 63
   EVA numbers to collect.
+
+## D13. How Timetables data is parsed and stored
+- **Date:** 2026-10-20
+- **Status:** Accepted
+- **Context:** Building step 2 (XML → rows), checked against live responses
+  for Frankfurt(Main)Hbf on 2026-10-20.
+- **Findings:**
+  - Each `/rchg` entry is the stop's full current change state, identical
+    to its `/fchg` entry (25 of 25 matched). Both feeds are parsed and
+    stored the same way. Calls 30 s apart overlapped on 24 of 25 stops, so
+    polling every ~90 s inside the 2-minute window is safe.
+  - `/fchg` reaches back roughly 8–12 hours and a few hours ahead.
+  - Message types: `d` delay reason (numeric code), `q` quality, `f` free
+    text, `h` disruption notice with a category such as `BAUARBEITEN` and
+    no code.
+  - `cs="c"` means cancelled; `cs="p"` means reinstated after a cancellation.
+- **Decisions:**
+  - **Clock change:** times are resolved to Europe/Berlin with the right UTC
+    offset. A local time that happens twice (02:00–02:59 when clocks go
+    back) is resolved to whichever occurrence is closer to a reference: the
+    planned time for forecasts, otherwise the fetch time.
+  - **Changes for unknown stops:** if the change-feed entry names the train
+    (`tl`), the stop is created from it (e.g. trains added at short notice).
+    Otherwise it's skipped; `/fchg` reports it again once its `/plan` hour
+    has been fetched. Nothing is buffered.
+  - **Schema addition:** `stop_messages` gets a `category` column, so
+    disruption categories such as construction work are kept as a possible
+    model feature.
+- **Consequences:** The collector (step 3) should fetch `/plan` at least 4
+  hours ahead, and at startup also the past hours of today, so that
+  `/fchg` changes have a stop to attach to. There is no migration tool yet;
+  schema changes before deployment mean recreating the local database.
+
+## D14. Store times in UTC; rules for the repeated hour
+- **Date:** 2026-10-20
+- **Status:** Accepted. Supersedes the time format in D7
+  (`2026-10-20T17:18+02:00`) and the clock-change rule in D13.
+- **Context:** The code review of step 2 found that ISO text with mixed
+  offsets (`+02:00` in summer, `+01:00` in winter) sorts in the wrong order
+  across the clock change, which breaks `ORDER BY` and range queries.
+- **Decision:** Store every time as ISO 8601 text in UTC
+  (e.g. `2026-10-20T15:18:00+00:00`). Convert to Europe/Berlin when reading.
+  When a local time happens twice (02:00–02:59 when clocks go back):
+  - a forecast is never read as more than 10 minutes early; among the
+    remaining options, the one closest to the planned time wins (the
+    smaller delay);
+  - a planned departure is never before the stop's planned arrival;
+  - the trip start always takes the first occurrence, so every station
+    gets the same (trip ID, trip start) and journeys aren't split;
+  - a time that doesn't exist (02:00–02:59 when clocks go forward) is
+    moved forward an hour.
+- **Known limitation:** a planned time in the repeated hour with nothing
+  earlier at that stop to anchor it is resolved against the fetch time. A
+  trip that really started in the second 02:00 hour gets a start an hour
+  early. Both affect a handful of night trains once a year.

@@ -1,0 +1,86 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<timetable station="Frankfurt(Main)Hbf" eva="8000105">
+  <s id="3639185015027004194-2610201611-9" eva="8000105">
+    <ar ct="2610202051">
+      <m id="9093693845919793856-7029810092296346936" t="d" c="14" ts="2610201837" ts-tts="26-10-20 18:37:45.288" />
+      <m id="5587855156057234262-" t="f" c="0" ts="2610201840" ts-tts="26-10-20 18:40:35.369" />
+    </ar>
+    <dp ct="2610202057">
+      <m id="9093693845919793856-7029810092296346936" t="d" c="14" ts="2610201837" ts-tts="26-10-20 18:37:45.288" />
+      <m id="5587855156057234262-" t="f" c="0" ts="2610201840" ts-tts="26-10-20 18:40:35.369" />
+    </dp>
+  </s>
+  <s id="-5207450347899841717-2610201800-5" eva="8000105">
+    <ar cpth="" cs="c" clt="2610201443">
+      <m id="3112231786833619223-" t="f" c="0" ts="2610201049" ts-tts="26-10-20 10:49:46.120" />
+      <m id="3492580465634349312-" t="f" c="0" ts="2610201049" ts-tts="26-10-20 10:49:46.120" />
+      <m id="-2661195930259572083-" t="f" c="0" ts="2610201049" ts-tts="26-10-20 10:49:46.120" />
+      <m id="9022106650463302039--961136756982845366" t="d" c="37" ts="2610201443" ts-tts="26-10-20 14:43:43.501" />
+      <m id="-5705137182942319087-" t="f" c="0" ts="2610201443" ts-tts="26-10-20 14:43:43.501" />
+    </ar>
+  </s>
+  <s id="488578513775240193-2610201928-10" eva="8000105">
+    <ar ct="2610202004" l="S7">
+      <m id="6859478856609863242--7845881287084851959" t="d" c="43" ts="2610201953" ts-tts="26-10-20 19:53:58.203" />
+    </ar>
+  </s>
+  <s id="-6292402313742373016-2610202020-1" eva="8000105">
+    <dp ct="2610202020" l="RE99" />
+  </s>
+  <s id="1303617009360529856-2610202020-1" eva="8000105">
+    <dp ct="2610202020" l="RE98" />
+  </s>
+  <s id="1595700573828912109-2610202034-1" eva="8000105">
+    <m id="3027095c-3568-4979-ac98-e18194c575a0" t="h" from="2610140928" to="2610252200" cat="BAUARBEITEN" ts="2610201050" ts-tts="26-10-20 10:50:03.926" pr="3" />
+  </s>
+  <s id="-8394333759835531528-2610201643-6" eva="8000105">
+    <ar cp="9" ct="2610202055">
+      <m id="6895791667385104393--4660405814367323991" t="d" c="43" ts="2610201927" ts-tts="26-10-20 19:27:48.678" />
+    </ar>
+    <dp cp="9" ct="2610202101">
+      <m id="6895791667385104393--4660405814367323991" t="d" c="43" ts="2610201927" ts-tts="26-10-20 19:27:48.678" />
+    </dp>
+  </s>
+  <s id="-2204298528222529683-2610201939-9" eva="8000105">
+    <m id="3027095c-3568-4979-ac98-e18194c575a0" t="h" from="2610140928" to="2610252200" cat="BAUARBEITEN" ts="2610201050" ts-tts="26-10-20 10:50:03.925" pr="3" />
+    <ar ct="2610202029" l="RE60" />
+  </s>
+  <s id="-3019965818182152821-2610201821-4" eva="8000105">
+    <ar ppth="Düsseldorf Hbf|Köln Messe/Deutz Gl.11-12|Frankfurt(M) Flughafen Fernbf" pp="8" ct="2610202028" pt="2610201951" fb="ICE 729">
+      <m id="6200129558888643719-5646505774885949322" t="d" c="36" ts="2610201924" ts-tts="26-10-20 19:24:42.311" />
+      <m id="-1461742217116174043-" t="f" c="0" ts="2610201953" ts-tts="26-10-20 19:53:41.455" />
+      <m id="-1554451997265893429-" t="f" c="0" ts="2610201955" ts-tts="26-10-20 19:55:52.592" />
+    </ar>
+    <dp ppth="Aschaffenburg Hbf|Würzburg Hbf|Nürnberg Hbf|Ingolstadt Hbf|München Hbf" pp="8" ct="2610202034" pt="2610201957" fb="ICE 729">
+      <m id="6200129558888643719-5646505774885949322" t="d" c="36" ts="2610201924" ts-tts="26-10-20 19:24:42.311" />
+      <m id="-1461742217116174043-" t="f" c="0" ts="2610201953" ts-tts="26-10-20 19:53:41.455" />
+      <m id="-1554451997265893429-" t="f" c="0" ts="2610201955" ts-tts="26-10-20 19:55:52.592" />
+    </dp>
+    <tl f="F" t="p" o="80" c="ICE" n="729" />
+  </s>
+  <s id="7406329402276104660-2610202010-1" eva="8000105">
+    <dp ppth="Darmstadt Hbf|Bensheim|Weinheim(Bergstr)Hbf|Heidelberg Hbf|Stuttgart Hbf" cp="11" pp="13" ct="2610202010" pt="2610202010" wings="-8959018065734509300-2610202010" l="" fb="ICE 2851">
+      <m id="7266406632483656788-" t="f" c="0" ts="2610201146" ts-tts="26-10-20 11:46:49.919" />
+      <m id="-19006178060682839-" t="f" c="0" ts="2610201146" ts-tts="26-10-20 11:46:49.919" />
+      <m id="9106231886064350439-" t="f" c="0" ts="2610201146" ts-tts="26-10-20 11:46:49.919" />
+      <m id="-2337656623882053191-" t="f" c="0" ts="2610201149" ts-tts="26-10-20 11:49:52.436" />
+      <m id="-5647650313486122621-6149671156108990200" t="d" c="48" ts="2610201940" ts-tts="26-10-20 19:40:53.734" />
+      <m id="9114603932645982406-" t="f" c="0" ts="2610202000" ts-tts="26-10-20 20:00:17.880" />
+      <m id="2741772729401545743-" t="f" c="0" ts="2610202000" ts-tts="26-10-20 20:00:17.880" />
+    </dp>
+    <tl f="F" t="s" o="NZ" c="ICE" n="2851" />
+  </s>
+  <s id="5031310367914604275-2610201224-1" eva="8000105">
+    <ar cpth="" ppth="" pt="2610201224" cs="c" ps="a" clt="2610201224" l="RB82" />
+    <dp cpth="Darmstadt Nord|Darmstadt Ost|Darmstadt TU-Lichtwiese|Mühltal|Ober Ramstadt|Reinheim(Odenw)|Otzberg Lengfeld|Groß-Umstadt Wiebelsbach|Höchst Hetschbach|Höchst(Odenw)|Höchst Mümling-Grumbach|Bad König|Bad König Zell|Michelstadt|Erbach(Odenw) Nord|Erbach(Odenw)|Oberzent-Hetzbach|Oberzent-Schöllenbach|Oberzent-Kailbach|Eberbach" ppth="Darmstadt Nord|Darmstadt Ost|Darmstadt TU-Lichtwiese|Mühltal|Ober Ramstadt|Reinheim(Odenw)|Otzberg Lengfeld|Groß-Umstadt Wiebelsbach|Höchst Hetschbach|Höchst(Odenw)|Höchst Mümling-Grumbach|Bad König|Bad König Zell|Michelstadt|Erbach(Odenw) Nord|Erbach(Odenw)|Oberzent-Hetzbach|Oberzent-Schöllenbach|Oberzent-Kailbach|Eberbach" pp="11" ct="2610201254" pt="2610201224" cs="c" clt="2610201224" l="RB82" fb="RB82">
+      <m id="-8082021700072465805" t="d" c="48" ts="2610201211" ts-tts="26-10-20 12:11:49.070" />
+      <m id="--3697455740464143744" t="d" c="41" ts="2610201224" ts-tts="26-10-20 12:24:44.890" />
+    </dp>
+    <tl f="D" t="p" o="R4" c="VIA" n="25169" />
+  </s>
+  <s id="3203200605183773385-2610201947-1" eva="8000105">
+    <dp cpth="Frankfurt-Höchst|Frankfurt-Unterliederbach|Liederbach-Süd|Liederbach|Kelkheim-Münster|Kelkheim|Kelkheim-Hornau|Schneidhain|Königstein(Taunus)" ct="2610201947" cs="c" clt="2610201930" l="RB12">
+      <m id="-6458530803640816346-7136419503106894462" t="d" c="48" ts="2610201930" ts-tts="26-10-20 19:30:07.381" />
+    </dp>
+  </s>
+</timetable>

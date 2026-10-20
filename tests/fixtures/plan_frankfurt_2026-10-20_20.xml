@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<timetable station="Frankfurt(Main)Hbf">
+  <s id="3639185015027004194-2610201611-9">
+    <tl f="F" t="p" o="80" c="ICE" n="1554" />
+    <ar pt="2610202037" pp="5" fb="ICE 1554" ppth="Dresden Hbf|Dresden-Neustadt|Leipzig Hbf|Erfurt Hbf|Gotha|Eisenach Hbf|Bad Hersfeld|Fulda" />
+    <dp pt="2610202042" pp="5" fb="ICE 1554" ppth="Frankfurt(M) Flughafen Fernbf|Wiesbaden Hbf" />
+  </s>
+  <s id="-5207450347899841717-2610201800-5">
+    <tl f="F" t="p" o="80" c="ICE" n="1119" />
+    <ar pt="2610202039" pp="8" fb="ICE 1119" ppth="Hannover Hbf|Hannover Messe/Laatzen|Göttingen|Kassel-Wilhelmshöhe" />
+  </s>
+  <s id="488578513775240193-2610201928-10">
+    <tl f="S" t="p" o="800528" c="S" n="35766" />
+    <ar pt="2610202004" pp="18" l="S7" fb="S7" ppth="Riedstadt-Goddelau|Riedstadt-Wolfskehlen|Groß Gerau-Dornheim|Groß Gerau-Dornberg|Mörfelden|Walldorf(Hess)|Zeppelinheim|Frankfurt am Main - Stadion|Frankfurt-Niederrad" />
+  </s>
+  <s id="-6292402313742373016-2610202020-1">
+    <tl f="D" t="p" o="K4RE" c="HLB" n="15120" />
+    <dp pt="2610202020" pp="16" l="RE99" fb="RE99" wings="1303617009360529856-2610202020" ppth="Friedberg(Hess)|Gießen|Wetzlar|Herborn(Dillkr)|Dillenburg|Haiger|Siegen Hbf" />
+    <tra t="v" id="-8342540790901414241" ref-to="1303617009360529856-2610202020" s="a" o="p" jt="j" />
+  </s>
+  <s id="1303617009360529856-2610202020-1">
+    <tl f="D" t="p" o="K4RE" c="HLB" n="15020" />
+    <dp pt="2610202020" pp="16" l="RE98" fb="RE98" ppth="Friedberg(Hess)|Gießen|Marburg(Lahn)|Cölbe|Kirchhain(Bz Kassel)|Stadtallendorf|Neustadt(Kr Marburg)|Schwalmstadt-Wiera|Treysa|Schlierbach(Schwalm-Eder-Kr.)|Zimmersrode|Borken(Hess)|Singlis|Wabern(Bz Kassel)|Felsberg-Gensungen|Felsberg-Altenbrunslar|Felsberg-Wolfershausen|Edermünde-Grifte|Baunatal-Guntershausen|Kassel-Wilhelmshöhe" />
+    <tra t="v" id="-8342540790901414241" ref-from="-6292402313742373016-2610202020" s="a" o="p" jt="j" />
+  </s>
+  <s id="1595700573828912109-2610202034-1">
+    <tl f="N" t="p" o="800574" c="RE" n="4681" />
+    <dp pt="2610202034" pp="10" l="RE60" fb="RE60" ppth="Langen(Hess)|Darmstadt Hbf|Bickenbach(Bergstr)|Zwingenberg(Bergstr)|Bensheim|Heppenheim(Bergstr)|Hemsbach|Weinheim(Bergstr)Hbf" />
+  </s>
+  <s id="-8394333759835531528-2610201643-6">
+    <tl f="F" t="p" o="80" c="ICE" n="379" />
+    <ar pt="2610202044" pp="7" fb="ICE 379" ppth="Berlin Hbf|Halle(Saale)Hbf|Erfurt Hbf|Fulda|Hanau Hbf" />
+    <dp pt="2610202050" pp="7" fb="ICE 379" ppth="Mannheim Hbf|Karlsruhe Hbf" />
+  </s>
+  <s id="-2204298528222529683-2610201939-9">
+    <tl f="N" t="p" o="800574" c="RE" n="4678" />
+    <ar pt="2610202025" pp="10" l="RE60" fb="RE60" ppth="Weinheim(Bergstr)Hbf|Hemsbach|Heppenheim(Bergstr)|Bensheim|Zwingenberg(Bergstr)|Bickenbach(Bergstr)|Darmstadt Hbf|Langen(Hess)" />
+  </s>
+</timetable>

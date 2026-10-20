@@ -4,8 +4,11 @@ All SQL lives in this module (decision D11), so a later move to Postgres
 stays contained. The schema follows decision D7. The ``journeys`` table is
 not created here because it's derived from ``stops`` by a later job.
 
-Times are stored as ISO 8601 text with their UTC offset, e.g.
-``2026-10-20T17:18:00+02:00``. Booleans are stored as 0 or 1.
+Times are stored as ISO 8601 text in UTC, e.g. ``2026-10-20T15:18:00+00:00``
+for 17:18 German summer time. Keeping one offset means sorting or comparing
+the text gives time order, also across the clock change (D14). Convert to
+Europe/Berlin when reading for display or for local-time features.
+Booleans are stored as 0 or 1.
 
 Example:
     Create the database and load the reference data::
@@ -17,10 +20,13 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from db_ml.files import load_json
+from db_ml.timetable_xml import Event, Stop
 
 DEFAULT_DATABASE_PATH = Path("data/db_ml.sqlite")
 TOP_STATIONS_PATH = Path("data/processed/top_stations.json")
@@ -88,6 +94,7 @@ CREATE TABLE IF NOT EXISTS stop_messages (
     message_id   TEXT NOT NULL,
     type         TEXT,
     code         INTEGER,
+    category     TEXT,
     message_time TEXT,
     PRIMARY KEY (stop_id, message_id)
 );
@@ -205,6 +212,238 @@ def collected_evas(conn: sqlite3.Connection) -> list[int]:
     """
     rows = conn.execute("SELECT eva FROM station_evas WHERE collect = 1 ORDER BY eva")
     return [row["eva"] for row in rows]
+
+
+@dataclass(frozen=True)
+class SaveResult:
+    """How many stops a save call handled, by outcome.
+
+    Attributes:
+        saved: Stops written (for change feeds: stops whose state changed).
+        unchanged: Change-feed stops whose state matched the last snapshot.
+        skipped: Stops not stored: S-Bahn trains, EVAs we don't know, and
+            changes for stops we have no details for yet.
+    """
+
+    saved: int = 0
+    unchanged: int = 0
+    skipped: int = 0
+
+
+def _iso(value: datetime | None) -> str | None:
+    """Formats a time for storage, in UTC.
+
+    Args:
+        value: An aware datetime, or None.
+
+    Returns:
+        ISO 8601 text in UTC (``+00:00``), or None.
+    """
+    return value.astimezone(UTC).isoformat() if value else None
+
+
+UPSERT_STOP = """
+INSERT INTO stops (stop_id, trip_id, trip_start, stop_index, eva, category,
+                   train_number, line, planned_arrival, planned_departure,
+                   planned_platform, route_before, route_after, coupled_with,
+                   first_seen_at, last_updated_at)
+VALUES (:stop_id, :trip_id, :trip_start, :stop_index, :eva, :category,
+        :train_number, :line, :planned_arrival, :planned_departure,
+        :planned_platform, :route_before, :route_after, :coupled_with,
+        :now, :now)
+ON CONFLICT (stop_id) DO UPDATE SET
+    category = COALESCE(excluded.category, stops.category),
+    train_number = COALESCE(excluded.train_number, stops.train_number),
+    line = COALESCE(excluded.line, stops.line),
+    planned_arrival = COALESCE(excluded.planned_arrival, stops.planned_arrival),
+    planned_departure = COALESCE(excluded.planned_departure, stops.planned_departure),
+    planned_platform = COALESCE(excluded.planned_platform, stops.planned_platform),
+    route_before = COALESCE(excluded.route_before, stops.route_before),
+    route_after = COALESCE(excluded.route_after, stops.route_after),
+    coupled_with = COALESCE(excluded.coupled_with, stops.coupled_with),
+    last_updated_at = excluded.last_updated_at
+"""
+
+
+def _planned_row(stop: Stop, observed_at: datetime) -> dict[str, Any]:
+    """Builds the planned part of a ``stops`` row.
+
+    Args:
+        stop: A parsed stop.
+        observed_at: When the data was fetched.
+
+    Returns:
+        Named parameters for ``UPSERT_STOP``.
+    """
+    arrival, departure = stop.arrival or Event(), stop.departure or Event()
+    return {
+        "stop_id": stop.stop_id,
+        "trip_id": stop.trip_id,
+        "trip_start": _iso(stop.trip_start),
+        "stop_index": stop.stop_index,
+        "eva": stop.eva,
+        "category": stop.category,
+        "train_number": stop.train_number,
+        "line": departure.line or arrival.line,
+        "planned_arrival": _iso(arrival.planned_time),
+        "planned_departure": _iso(departure.planned_time),
+        # One platform column (D7): the departure's, else the arrival's.
+        "planned_platform": departure.planned_platform or arrival.planned_platform,
+        "route_before": arrival.planned_path,
+        "route_after": departure.planned_path,
+        "coupled_with": departure.wings or arrival.wings,
+        "now": _iso(observed_at),
+    }
+
+
+def _snapshot(stop: Stop) -> tuple[str | None, str | None, str | None, int, int]:
+    """Extracts the changeable state of a stop, as stored in ``stop_changes``.
+
+    Args:
+        stop: A stop parsed from a change feed.
+
+    Returns:
+        (changed arrival, changed departure, changed platform, arrival
+        cancelled, departure cancelled).
+    """
+    arrival, departure = stop.arrival or Event(), stop.departure or Event()
+    return (
+        _iso(arrival.changed_time),
+        _iso(departure.changed_time),
+        departure.changed_platform or arrival.changed_platform,
+        int(arrival.cancelled),
+        int(departure.cancelled),
+    )
+
+
+def _known_evas(conn: sqlite3.Connection) -> set[int]:
+    """Lists the EVA numbers in ``station_evas``.
+
+    Args:
+        conn: An open database connection.
+
+    Returns:
+        All EVA numbers stops may refer to.
+    """
+    return {row["eva"] for row in conn.execute("SELECT eva FROM station_evas")}
+
+
+def save_plan(conn: sqlite3.Connection, stops: list[Stop], observed_at: datetime) -> SaveResult:
+    """Stores stops from a ``/plan`` response.
+
+    New stops are inserted. For stops already stored, planned values are
+    updated and changed values are left alone. S-Bahn trains are skipped (D8).
+
+    Args:
+        conn: An open database connection.
+        stops: Stops parsed from a ``/plan`` response.
+        observed_at: When the response was fetched.
+
+    Returns:
+        How many stops were saved and skipped.
+    """
+    known = _known_evas(conn)
+    rows = [_planned_row(s, observed_at) for s in stops if not s.is_s_bahn and s.eva in known]
+    with conn:
+        conn.executemany(UPSERT_STOP, rows)
+    return SaveResult(saved=len(rows), skipped=len(stops) - len(rows))
+
+
+def _last_snapshot(conn: sqlite3.Connection, stop_id: str) -> tuple | None:
+    """Reads the most recent stored snapshot for a stop.
+
+    Args:
+        conn: An open database connection.
+        stop_id: The stop to look up.
+
+    Returns:
+        The snapshot tuple in ``_snapshot`` order, or None if there's none.
+    """
+    row = conn.execute(
+        """
+        SELECT changed_arrival, changed_departure, changed_platform,
+               arrival_cancelled, departure_cancelled
+        FROM stop_changes WHERE stop_id = ? ORDER BY change_id DESC LIMIT 1
+        """,
+        (stop_id,),
+    ).fetchone()
+    return tuple(row) if row else None
+
+
+def save_changes(
+    conn: sqlite3.Connection, stops: list[Stop], observed_at: datetime, source: str
+) -> SaveResult:
+    """Stores stops from an ``/fchg`` or ``/rchg`` response.
+
+    Each change-feed entry is the stop's full current change state. A new
+    ``stop_changes`` row is added only when that state differs from the last
+    one stored (D9), and the stop's ``changed_*`` columns are updated to
+    match. Messages are added once per stop.
+
+    A change for a stop we don't have yet is kept only if the entry names
+    the train (e.g. one added at short notice); then the stop is created
+    from it. Other unknown stops are skipped: they're S-Bahn trains, or
+    trains whose ``/plan`` hour we haven't fetched yet, and ``/fchg`` will
+    report them again once we have.
+
+    Args:
+        conn: An open database connection.
+        stops: Stops parsed from a change feed.
+        observed_at: When the response was fetched.
+        source: ``"fchg"`` or ``"rchg"``.
+
+    Returns:
+        How many stops changed, were unchanged and were skipped.
+    """
+    known = _known_evas(conn)
+    saved = unchanged = skipped = 0
+    now = _iso(observed_at)
+    with conn:
+        for stop in stops:
+            if stop.is_s_bahn or stop.eva not in known:
+                skipped += 1
+                continue
+            if stop.has_train_details:
+                conn.execute(UPSERT_STOP, _planned_row(stop, observed_at))
+            elif not conn.execute("SELECT 1 FROM stops WHERE stop_id = ?", (stop.stop_id,)).fetchone():
+                skipped += 1
+                continue
+
+            snapshot = _snapshot(stop)
+            if snapshot == _last_snapshot(conn, stop.stop_id):
+                unchanged += 1
+            else:
+                saved += 1
+                conn.execute(
+                    """
+                    INSERT INTO stop_changes (stop_id, observed_at, source,
+                        changed_arrival, changed_departure, changed_platform,
+                        arrival_cancelled, departure_cancelled)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (stop.stop_id, now, source, *snapshot),
+                )
+                conn.execute(
+                    """
+                    UPDATE stops SET changed_arrival = ?, changed_departure = ?,
+                        changed_platform = ?, arrival_cancelled = ?,
+                        departure_cancelled = ?, last_updated_at = ?
+                    WHERE stop_id = ?
+                    """,
+                    (*snapshot, now, stop.stop_id),
+                )
+            conn.executemany(
+                """
+                INSERT OR IGNORE INTO stop_messages (stop_id, message_id, type,
+                    code, category, message_time)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (stop.stop_id, m.message_id, m.type, m.code, m.category, _iso(m.time))
+                    for m in stop.messages
+                ],
+            )
+    return SaveResult(saved=saved, unchanged=unchanged, skipped=skipped)
 
 
 def main() -> None:
