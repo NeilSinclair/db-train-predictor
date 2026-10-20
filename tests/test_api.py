@@ -132,3 +132,14 @@ def test_passes_request_options_through():
 )
 def test_retry_delay(headers, attempt, expected):
     assert retry_delay(httpx.Response(429, headers=headers), attempt, 2.0) == expected
+
+
+def test_retry_wait_is_capped_even_if_the_server_asks_for_more():
+    client, _ = client_returning(
+        httpx.Response(429, headers={"Retry-After": "120"}), httpx.Response(200)
+    )
+    sleeps: list[float] = []
+
+    request_with_retries(client, "GET", "/x", max_delay_seconds=5, sleep=sleeps.append)
+
+    assert sleeps == [5]

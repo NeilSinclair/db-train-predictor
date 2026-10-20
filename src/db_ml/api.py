@@ -111,6 +111,7 @@ def request_with_retries(
     *,
     attempts: int = 4,
     backoff_seconds: float = 2.0,
+    max_delay_seconds: float = 60.0,
     sleep: Callable[[float], None] | None = None,
     **kwargs,
 ) -> httpx.Response:
@@ -125,6 +126,8 @@ def request_with_retries(
         url: The URL or path to request.
         attempts: The maximum number of tries, including the first.
         backoff_seconds: The wait after the first failure; it doubles each time.
+        max_delay_seconds: The longest single wait, also when the server's
+            ``Retry-After`` asks for more.
         sleep: Called to wait between tries; defaults to ``time.sleep``.
         **kwargs: Passed on to ``httpx.Client.request`` (e.g. ``params``).
 
@@ -142,9 +145,9 @@ def request_with_retries(
         except httpx.TransportError:
             if attempt == attempts:
                 raise
-            sleep(retry_delay(None, attempt, backoff_seconds))
+            sleep(min(retry_delay(None, attempt, backoff_seconds), max_delay_seconds))
             continue
         if response.status_code not in RETRY_STATUSES or attempt == attempts:
             return response
-        sleep(retry_delay(response, attempt, backoff_seconds))
+        sleep(min(retry_delay(response, attempt, backoff_seconds), max_delay_seconds))
     raise AssertionError("unreachable")  # pragma: no cover

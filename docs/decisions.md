@@ -222,3 +222,42 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
   earlier at that stop to anchor it is resolved against the fetch time. A
   trip that really started in the second 02:00 hour gets a start an hour
   early. Both affect a handful of night trains once a year.
+
+## D15. Collector schedule and behaviour
+- **Date:** 2026-10-20
+- **Status:** Accepted
+- **Decision:** One loop (`collector.py`) with three task types, run in this
+  priority order when several are due:
+  1. `/rchg` for each EVA every 90 s, spread evenly across the interval;
+  2. `/plan` for each hour from 12 hours back to 4 hours ahead, fetched
+     once per (EVA, hour), new hours added as they come into view;
+  3. `/fchg` for each EVA every hour, as a catch-up.
+  A rate limiter on the HTTP client spaces every request, retries
+  included, at least 1.05 s apart. A failed task is logged and the loop
+  continues. If a whole polling interval is missed (e.g. the machine was
+  suspended), the task runs once straight away and resumes its rhythm from
+  there. SIGTERM/SIGINT stop the loop within about a second.
+- **Revised after the code review (same day, before the first commit):**
+  - Requests retry once, after 1 s, waiting at most 5 s even if the API
+    asks for longer, with a 10 s timeout. `/rchg` has only ~30 s of slack,
+    so one slow station must not stall everyone else's polls.
+  - A failed `/plan` is retried every 5 minutes for as long as its hour is
+    within the 12-hours-back window, instead of giving up after 3 tries
+    and losing the hour.
+  - The plan window always covers 12 hours back, not only at startup, so
+    hours missed during a long pause are fetched.
+  - Plan hours are keyed by German local hour, so the repeated 02:00 hour
+    on the clock-change night is fetched once (the API can't tell the two
+    apart either).
+  - The collector refuses to start if `/rchg` would need more than 80% of
+    the request budget (86+ EVAs), since `/plan` and `/fchg` would starve.
+  - Shutdown polls a stop flag once a second instead of waiting on it,
+    which avoids a possible deadlock in the signal handler.
+- **Why:** `/rchg` must never fall behind or changes are lost; the plan
+  backfill and `/fchg` can wait. Restarting needs no extra recovery logic:
+  the startup backfill and the first `/fchg` fill the gap.
+- **Measured** (live run, 63 EVAs, 5.5 minutes, 2026-10-20 20:21):
+  316 requests at 57.3/min, busiest 60-second window 58, all HTTP 200;
+  response time median 0.04 s, max 0.15 s; 231 `/rchg` polls at most 1 s
+  late. The startup backfill runs at ~15 plan fetches a minute alongside
+  `/rchg`, so it takes ~70 minutes, and the first `/fchg` waits for it.

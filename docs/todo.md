@@ -45,14 +45,16 @@ Tick items off as they're done; record any decisions they need in
 - [x] Live run on Frankfurt, Berlin and München: 292 stops, 282 snapshots,
   696 messages; a follow-up `/rchg` added only the stops that changed.
 
-### Step 3: Collector loop
-- [ ] Polling schedule: `/plan` hourly for the next 4+ hours (`/fchg` reaches
-  a few hours ahead), `/rchg` every ~90 s per EVA, `/fchg` hourly as a
-  catch-up.
-- [ ] At startup, also fetch `/plan` for today's past hours: `/fchg` reaches
-  back 8–12 hours, and those changes need a stop to attach to.
-- [ ] One rate limiter shared by all requests (60/minute).
-- [ ] Logging, and recovery after a restart (catch up with `/fchg`).
+### Step 3: Collector loop (done 2026-10-20, see D15)
+- [x] Polling schedule (`collector.py`): `/rchg` every 90 s per EVA (spread
+  out), `/plan` for the next 4 hours as they come into view, `/fchg` hourly.
+- [x] At startup, `/plan` for the past 12 hours too, in the background.
+- [x] One rate limiter on the HTTP client, so retries count too.
+- [x] Errors are logged and the loop carries on; requests retry once,
+  briefly; failed `/plan` fetches are retried every 5 minutes while their
+  hour is in the window. A summary is logged every 5 minutes.
+- [x] Restart recovery: startup backfill plus `/fchg` catches up.
+- [x] Clean stop on SIGTERM/SIGINT. Run with `uv run db-ml-collector`.
 
 - [ ] Check real data for messages flagged as deleted (`del` attribute, not
   seen in 700+ sampled stops). If they occur, store the flag and update the
