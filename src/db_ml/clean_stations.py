@@ -1,5 +1,17 @@
-import json
+"""Picks the main stations out of the full StaDa station list.
 
+Example:
+    Write ``data/raw/stations_clean.json``::
+
+        $ uv run python -m db_ml.clean_stations
+"""
+
+from pathlib import Path
+
+from db_ml.files import load_json, save_json
+
+STATIONS_PATH = Path('data/raw/stations.json')
+CLEAN_STATIONS_PATH = Path('data/raw/stations_clean.json')
 # Main stations whose names don't contain "Hbf" (decision D12).
 EXTRA_MAIN_STATIONS = {'Leverkusen Mitte'}
 
@@ -18,8 +30,8 @@ def is_main_station(name: str) -> bool:
 
 
 def main() -> None:
-    with open('data/raw/stations.json') as f:
-        stations = json.load(f)
+    """Reads all stations, keeps the main stations and saves them."""
+    stations = load_json(STATIONS_PATH)
 
     main_stations = []
 
@@ -27,8 +39,7 @@ def main() -> None:
         if is_main_station(item['name']):
             main_stations.append(item)
 
-    with open('data/raw/stations_clean.json', 'w') as f:
-        json.dump(main_stations, f, indent=2)
+    save_json(main_stations, CLEAN_STATIONS_PATH)
 
     print(f'Number of main_stations is {len(main_stations)}')
 
