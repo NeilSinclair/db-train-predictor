@@ -4,11 +4,14 @@ What's left to build, plus findings from the code review of 2026-10-20.
 Tick items off as they're done; record any decisions they need in
 [decisions.md](decisions.md).
 
-**Where we left off (2026-10-20):** steps 1–4 are done: the collector
+**Where we left off (2026-10-21):** steps 1–4 are done: the collector
 runs 24/7 in Docker on the Hetzner VPS since 2026-10-20 ~20:52 (D16,
-[deployment.md](deployment.md)); restarts are cheap since D18. **Next:
-the prediction API (D20, 2026-10-21)** and the nightly backup to the
-Hetzner Storage Box, then the checks under "After it has run for a while".
+[deployment.md](deployment.md)); restarts are cheap since D18. The model
+target and feature hypotheses are written down (D22,
+[features.md](features.md)), and the collector stores everything they
+need (D23). **Next:** keep collecting until EDA in mid-November; meanwhile
+the nightly backup to the Hetzner Storage Box, where the prediction API
+runs (D20), and the checks under "After it has run for a while".
 
 ## Done 2026-10-20 (from the code review)
 
@@ -87,10 +90,10 @@ Hetzner Storage Box, then the checks under "After it has run for a while".
 
 **Close the collection gaps from [features.md](features.md)** (D22). DB
 doesn't keep these, so each day without them is lost:
-- [ ] Construction messages' validity dates (`from`, `to`) and priority
-  (`pr`) on `stop_messages` (F23).
-- [ ] Cancellation time (`clt`) on stops and changes (F24).
-- [ ] Operator (`tl o`) on stops (F2), and changed path (`cpth`) for
+- [x] Construction messages' validity dates (`from`, `to`) and priority
+  (`pr`) on `stop_messages` (F23). Migration 3, D23.
+- [x] Cancellation time (`clt`) on stops and changes (F24).
+- [x] Operator (`tl o`) on stops (F2), and changed path (`cpth`) for
   diversions (F25).
 
 **After it has run for a while:**

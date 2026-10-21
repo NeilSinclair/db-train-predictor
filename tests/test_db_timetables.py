@@ -21,6 +21,7 @@ ICE_729 = "-3019965818182152821-2610201821-4"
 RE_4678 = "-2204298528222529683-2610201939-9"
 S_35766 = "488578513775240193-2610201928-10"
 RB_12 = "3203200605183773385-2610201947-1"
+VIA_25169 = "5031310367914604275-2610201224-1"
 
 
 def load(name: str) -> list:
@@ -182,6 +183,35 @@ def test_save_changes_records_a_later_delay(conn):
     assert stop_row(conn, ICE_1554)["changed_arrival"] == "2026-10-20T18:56:00+00:00"
 
 
+def test_save_changes_stores_cancellation_time_operator_and_changed_path(conn):
+    save_plan(conn, PLAN, FETCHED_AT)
+    save_changes(conn, CHANGES, FETCHED_AT, "fchg")
+
+    assert stop_row(conn, ICE_1554)["operator"] == "80"  # from /plan
+    ice_1119 = stop_row(conn, ICE_1119)
+    assert ice_1119["arrival_cancelled_at"] == "2026-10-20T12:43:00+00:00"
+    assert ice_1119["changed_route_before"] == ""
+    snapshot = conn.execute(
+        "SELECT arrival_cancelled_at FROM stop_changes WHERE stop_id = ?", (ICE_1119,)
+    ).fetchone()
+    assert snapshot[0] == "2026-10-20T12:43:00+00:00"
+    via = stop_row(conn, VIA_25169)  # created from a full-detail change entry
+    assert (via["operator"], via["category"]) == ("R4", "VIA")
+
+
+def test_save_changes_records_a_diversion(conn):
+    save_plan(conn, PLAN, FETCHED_AT)
+    save_changes(conn, CHANGES, FETCHED_AT, "fchg")
+    ice = next(s for s in CHANGES if s.stop_id == ICE_1554)
+    diverted = replace(ice, departure=replace(ice.departure, changed_path="Hanau Hbf|Fulda"))
+
+    result = save_changes(conn, [diverted], FETCHED_AT + timedelta(minutes=3), "rchg")
+
+    assert result.saved == 1
+    assert stop_row(conn, ICE_1554)["changed_route_after"] == "Hanau Hbf|Fulda"
+    assert count(conn, "stop_changes") == 11
+
+
 def test_save_changes_records_reinstated_train(conn):
     save_plan(conn, PLAN, FETCHED_AT)
     save_changes(conn, CHANGES, FETCHED_AT, "fchg")
@@ -203,9 +233,13 @@ def test_save_changes_stores_messages_once(conn):
 
     assert count(conn, "stop_messages") == before > 0
     notice = conn.execute(
-        "SELECT type, code, category FROM stop_messages WHERE stop_id = ? AND type = 'h'", (RE_4678,)
+        "SELECT type, code, category, valid_from, valid_to, priority FROM stop_messages "
+        "WHERE stop_id = ? AND type = 'h'",
+        (RE_4678,),
     ).fetchone()
-    assert tuple(notice) == ("h", None, "BAUARBEITEN")
+    assert tuple(notice) == (
+        "h", None, "BAUARBEITEN", "2026-10-14T07:28:00+00:00", "2026-10-25T21:00:00+00:00", 3,
+    )
 
 
 def test_save_plan_again_keeps_changed_values(conn):

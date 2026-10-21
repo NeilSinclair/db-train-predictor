@@ -371,3 +371,28 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
   are kept in [features.md](features.md). We test them with EDA once
   there's enough data (about four weeks).
 - **Note:** D21 is the station2vec experiment, on its own branch.
+
+## D23. Store the attributes the feature list needs (migration 3)
+- **Date:** 2026-10-21
+- **Status:** Accepted
+- **Context:** Checking the feature hypotheses (D22,
+  [features.md](features.md)) against the real XML showed four attributes
+  DB sends that we didn't store. DB doesn't keep them, so every day
+  without them is lost.
+- **Decision:** Migration 3 adds:
+  - `stops.operator` (`tl o`), e.g. `80` for DB Fernverkehr (F2).
+  - When a cancellation was announced (`clt`), as `arrival_cancelled_at`
+    and `departure_cancelled_at` on `stops` and `stop_changes` (F24). This
+    tells cancellations known a day ahead from same-day ones.
+  - A diverted train's changed path (`cpth`), as `changed_route_before`
+    and `changed_route_after` on `stops` and `stop_changes` (F25). Empty
+    text means DB sent it empty, which it does for cancelled events.
+  - When a disruption notice applies (`from`, `to`) and its priority
+    (`pr`), as `valid_from`, `valid_to` and `priority` on `stop_messages`
+    (F23). Construction notices carry these, e.g. 14–25 Oct 2026.
+- **Consequences:** Rows from before the migration have NULL in the new
+  columns. Cancellation time and changed path are part of the snapshot, so
+  after the deploy, stops that have them get one extra `stop_changes` row
+  the next time they're seen. Messages are still stored once per stop
+  (`INSERT OR IGNORE`), so a notice whose validity DB later extends keeps
+  its first dates on that stop; new stops get the new dates.

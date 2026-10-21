@@ -3,7 +3,7 @@
 ``/plan``, ``/fchg`` and ``/rchg`` all return a ``<timetable>`` of ``<s>``
 stops with the same structure. ``/plan`` fills the planned attributes
 (``pt``, ``pp``, ``ppth``). The change feeds fill the changed ones (``ct``,
-``cp``, ``cs``) and messages, and each ``/rchg`` entry carries the stop's
+``cp``, ``cs``, ``clt``, ``cpth``) and messages, and each ``/rchg`` entry carries the stop's
 full current change state, exactly as ``/fchg`` does (checked 2026-10-20).
 
 Times arrive as ``YYMMDDHHmm`` in German local time with no UTC offset. On
@@ -42,8 +42,13 @@ class Event:
         changed_platform: The new platform (``cp``), if it changed.
         cancelled: Whether it's currently cancelled (``cs="c"``). A
             reinstated event has ``cs="p"`` and counts as not cancelled.
+        cancelled_at: When DB announced the cancellation (``clt``). It can
+            stay set after the event is reinstated.
         planned_path: Stations before (arrival) or after (departure) this
             stop, separated by ``|`` (``ppth``).
+        changed_path: The path after a change such as a diversion
+            (``cpth``). Empty text means DB sent the attribute empty, which
+            it does for cancelled events; None means it wasn't sent.
         line: The line name, e.g. ``"RE60"`` (``l``).
         wings: Trips this one is coupled to, as ``<trip id>-<trip start>``
             separated by ``|`` (``wings``).
@@ -54,7 +59,9 @@ class Event:
     changed_time: datetime | None = None
     changed_platform: str | None = None
     cancelled: bool = False
+    cancelled_at: datetime | None = None
     planned_path: str | None = None
+    changed_path: str | None = None
     line: str | None = None
     wings: str | None = None
 
@@ -71,6 +78,11 @@ class Message:
         code: The numeric reason code (``c``), if any.
         category: The disruption category (``cat``), e.g. ``"BAUARBEITEN"``.
         time: When DB issued it (``ts``).
+        valid_from: Start of the period it applies to (``from``). Only
+            disruption notices have one; for construction work it's known
+            in advance.
+        valid_to: End of that period (``to``).
+        priority: DB's priority (``pr``), 1 being the highest.
     """
 
     message_id: str
@@ -78,6 +90,9 @@ class Message:
     code: int | None
     category: str | None
     time: datetime | None
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    priority: int | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +108,8 @@ class Stop:
         category: Train category, e.g. ``"ICE"`` (``tl@c``). Change feeds
             usually leave this out.
         train_number: e.g. ``"372"`` (``tl@n``).
+        operator: The operator's code (``tl@o``), e.g. ``"80"`` for DB
+            Fernverkehr.
         arrival: The arrival, or None if the train starts here (or the feed
             has nothing about it).
         departure: The departure, or None if the train ends here (or the
@@ -108,6 +125,7 @@ class Stop:
     eva: int
     category: str | None = None
     train_number: str | None = None
+    operator: str | None = None
     arrival: Event | None = None
     departure: Event | None = None
     messages: tuple[Message, ...] = field(default_factory=tuple)
@@ -239,13 +257,18 @@ def split_stop_id(stop_id: str) -> tuple[str, str, int]:
 
 
 def _event(
-    element: ET.Element | None, reference: datetime, earliest: datetime | None = None
+    element: ET.Element | None,
+    reference: datetime,
+    fetched_at: datetime,
+    earliest: datetime | None = None,
 ) -> Event | None:
     """Reads an ``<ar>`` or ``<dp>`` element.
 
     Args:
         element: The element, or None if the stop doesn't have one.
         reference: Reference time for resolving the planned time.
+        fetched_at: When the response was fetched. Cancellations were
+            announced before then.
         earliest: Optional lower bound for the planned time (a departure
             can't be planned before its arrival).
 
@@ -267,7 +290,9 @@ def _event(
         changed_time=changed,
         changed_platform=element.get("cp"),
         cancelled=element.get("cs") == "c",
+        cancelled_at=parse_db_time(element.get("clt"), fetched_at, latest=fetched_at),
         planned_path=element.get("ppth"),
+        changed_path=element.get("cpth"),
         line=element.get("l") or None,
         wings=element.get("wings"),
     )
@@ -311,6 +336,9 @@ def _messages(stop: ET.Element, fetched_at: datetime) -> tuple[Message, ...]:
             code=_int_or_none(m.get("c")),
             category=m.get("cat"),
             time=parse_db_time(m.get("ts"), fetched_at, latest=fetched_at),
+            valid_from=parse_db_time(m.get("from"), fetched_at),
+            valid_to=parse_db_time(m.get("to"), fetched_at),
+            priority=_int_or_none(m.get("pr")),
         )
     return tuple(found.values())
 
@@ -330,11 +358,12 @@ def _parse_stop(s: ET.Element, default_eva: int, fetched_at: datetime) -> Stop:
         ValueError, AttributeError, TypeError: If the element is malformed.
     """
     trip_id, trip_start_text, stop_index = split_stop_id(s.get("id"))
-    arrival = _event(s.find("ar"), fetched_at)
+    arrival = _event(s.find("ar"), fetched_at, fetched_at)
     departure = _event(
         s.find("dp"),
         # A departure follows its arrival within minutes.
         arrival.planned_time if arrival and arrival.planned_time else fetched_at,
+        fetched_at,
         earliest=arrival.planned_time if arrival else None,
     )
     train = s.find("tl")
@@ -346,6 +375,7 @@ def _parse_stop(s: ET.Element, default_eva: int, fetched_at: datetime) -> Stop:
         eva=int(s.get("eva") or default_eva),
         category=train.get("c") if train is not None else None,
         train_number=train.get("n") if train is not None else None,
+        operator=train.get("o") if train is not None else None,
         arrival=arrival,
         departure=departure,
         messages=_messages(s, fetched_at),

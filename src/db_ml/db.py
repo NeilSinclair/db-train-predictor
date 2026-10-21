@@ -115,10 +115,29 @@ CREATE TABLE plan_fetches (
 );
 """
 
+# Attributes the model features need that DB doesn't keep for us (D23,
+# docs/features.md): the operator, when a cancellation was announced, the
+# changed path of a diverted train, and when disruption notices (e.g.
+# construction work) apply. Existing rows get NULL.
+SCHEMA_V3 = """
+ALTER TABLE stops ADD COLUMN operator TEXT;
+ALTER TABLE stops ADD COLUMN arrival_cancelled_at TEXT;
+ALTER TABLE stops ADD COLUMN departure_cancelled_at TEXT;
+ALTER TABLE stops ADD COLUMN changed_route_before TEXT;
+ALTER TABLE stops ADD COLUMN changed_route_after TEXT;
+ALTER TABLE stop_changes ADD COLUMN arrival_cancelled_at TEXT;
+ALTER TABLE stop_changes ADD COLUMN departure_cancelled_at TEXT;
+ALTER TABLE stop_changes ADD COLUMN changed_route_before TEXT;
+ALTER TABLE stop_changes ADD COLUMN changed_route_after TEXT;
+ALTER TABLE stop_messages ADD COLUMN valid_from TEXT;
+ALTER TABLE stop_messages ADD COLUMN valid_to TEXT;
+ALTER TABLE stop_messages ADD COLUMN priority INTEGER;
+"""
+
 # Schema migrations in order: entry N takes the database from version N to
 # N + 1, tracked in SQLite's ``PRAGMA user_version``. Only ever append; never
 # edit a migration that has run on a real database.
-MIGRATIONS = [SCHEMA_V1, SCHEMA_V2]
+MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3]
 
 
 def database_path() -> Path:
@@ -296,16 +315,17 @@ def _iso(value: datetime | None) -> str | None:
 
 UPSERT_STOP = """
 INSERT INTO stops (stop_id, trip_id, trip_start, stop_index, eva, category,
-                   train_number, line, planned_arrival, planned_departure,
-                   planned_platform, route_before, route_after, coupled_with,
-                   first_seen_at, last_updated_at)
+                   train_number, operator, line, planned_arrival,
+                   planned_departure, planned_platform, route_before,
+                   route_after, coupled_with, first_seen_at, last_updated_at)
 VALUES (:stop_id, :trip_id, :trip_start, :stop_index, :eva, :category,
-        :train_number, :line, :planned_arrival, :planned_departure,
-        :planned_platform, :route_before, :route_after, :coupled_with,
-        :now, :now)
+        :train_number, :operator, :line, :planned_arrival,
+        :planned_departure, :planned_platform, :route_before,
+        :route_after, :coupled_with, :now, :now)
 ON CONFLICT (stop_id) DO UPDATE SET
     category = COALESCE(excluded.category, stops.category),
     train_number = COALESCE(excluded.train_number, stops.train_number),
+    operator = COALESCE(excluded.operator, stops.operator),
     line = COALESCE(excluded.line, stops.line),
     planned_arrival = COALESCE(excluded.planned_arrival, stops.planned_arrival),
     planned_departure = COALESCE(excluded.planned_departure, stops.planned_departure),
@@ -336,6 +356,7 @@ def _planned_row(stop: Stop, observed_at: datetime) -> dict[str, Any]:
         "eva": stop.eva,
         "category": stop.category,
         "train_number": stop.train_number,
+        "operator": stop.operator,
         "line": departure.line or arrival.line,
         "planned_arrival": _iso(arrival.planned_time),
         "planned_departure": _iso(departure.planned_time),
@@ -348,15 +369,24 @@ def _planned_row(stop: Stop, observed_at: datetime) -> dict[str, Any]:
     }
 
 
-def _snapshot(stop: Stop) -> tuple[str | None, str | None, str | None, int, int]:
+# The changeable state of a stop, in the order ``_snapshot`` returns it. These
+# are the column names in both ``stop_changes`` and ``stops``.
+SNAPSHOT_COLUMNS = (
+    "changed_arrival", "changed_departure", "changed_platform",
+    "arrival_cancelled", "departure_cancelled",
+    "arrival_cancelled_at", "departure_cancelled_at",
+    "changed_route_before", "changed_route_after",
+)
+
+
+def _snapshot(stop: Stop) -> tuple:
     """Extracts the changeable state of a stop, as stored in ``stop_changes``.
 
     Args:
         stop: A stop parsed from a change feed.
 
     Returns:
-        (changed arrival, changed departure, changed platform, arrival
-        cancelled, departure cancelled).
+        The values for ``SNAPSHOT_COLUMNS``, in that order.
     """
     arrival, departure = stop.arrival or Event(), stop.departure or Event()
     return (
@@ -365,6 +395,10 @@ def _snapshot(stop: Stop) -> tuple[str | None, str | None, str | None, int, int]
         departure.changed_platform or arrival.changed_platform,
         int(arrival.cancelled),
         int(departure.cancelled),
+        _iso(arrival.cancelled_at),
+        _iso(departure.cancelled_at),
+        arrival.changed_path,
+        departure.changed_path,
     )
 
 
@@ -452,14 +486,21 @@ def _last_snapshot(conn: sqlite3.Connection, stop_id: str) -> tuple | None:
         The snapshot tuple in ``_snapshot`` order, or None if there's none.
     """
     row = conn.execute(
-        """
-        SELECT changed_arrival, changed_departure, changed_platform,
-               arrival_cancelled, departure_cancelled
-        FROM stop_changes WHERE stop_id = ? ORDER BY change_id DESC LIMIT 1
-        """,
+        f"SELECT {', '.join(SNAPSHOT_COLUMNS)} FROM stop_changes "
+        "WHERE stop_id = ? ORDER BY change_id DESC LIMIT 1",
         (stop_id,),
     ).fetchone()
     return tuple(row) if row else None
+
+
+INSERT_SNAPSHOT = (
+    f"INSERT INTO stop_changes (stop_id, observed_at, source, {', '.join(SNAPSHOT_COLUMNS)}) "
+    f"VALUES (?, ?, ?, {', '.join('?' for _ in SNAPSHOT_COLUMNS)})"
+)
+UPDATE_STOP_STATE = (
+    f"UPDATE stops SET {', '.join(f'{c} = ?' for c in SNAPSHOT_COLUMNS)}, last_updated_at = ? "
+    "WHERE stop_id = ?"
+)
 
 
 def save_changes(
@@ -506,32 +547,17 @@ def save_changes(
                 unchanged += 1
             else:
                 saved += 1
-                conn.execute(
-                    """
-                    INSERT INTO stop_changes (stop_id, observed_at, source,
-                        changed_arrival, changed_departure, changed_platform,
-                        arrival_cancelled, departure_cancelled)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (stop.stop_id, now, source, *snapshot),
-                )
-                conn.execute(
-                    """
-                    UPDATE stops SET changed_arrival = ?, changed_departure = ?,
-                        changed_platform = ?, arrival_cancelled = ?,
-                        departure_cancelled = ?, last_updated_at = ?
-                    WHERE stop_id = ?
-                    """,
-                    (*snapshot, now, stop.stop_id),
-                )
+                conn.execute(INSERT_SNAPSHOT, (stop.stop_id, now, source, *snapshot))
+                conn.execute(UPDATE_STOP_STATE, (*snapshot, now, stop.stop_id))
             conn.executemany(
                 """
                 INSERT OR IGNORE INTO stop_messages (stop_id, message_id, type,
-                    code, category, message_time)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    code, category, message_time, valid_from, valid_to, priority)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
-                    (stop.stop_id, m.message_id, m.type, m.code, m.category, _iso(m.time))
+                    (stop.stop_id, m.message_id, m.type, m.code, m.category, _iso(m.time),
+                     _iso(m.valid_from), _iso(m.valid_to), m.priority)
                     for m in stop.messages
                 ],
             )

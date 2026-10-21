@@ -46,7 +46,7 @@ predict arrivals there, not at small stations along the way.
 | # | Feature | Why we think it matters | Status |
 |---|---|---|---|
 | F1 | Category (ICE, IC, RE, RB, ...) | Long-distance and regional trains differ a lot | Stored (`stops.category`) |
-| F2 | Operator (`tl o`: DB Fernverkehr, private regional operators) | Operators differ in rolling stock and reliability | **Gap** |
+| F2 | Operator (`tl o`: DB Fernverkehr, private regional operators) | Operators differ in rolling stock and reliability | Stored since 2026-10-21 (`stops.operator`, D23) |
 | F3 | Delays of the same train number at this station, past 7 and 28 days: median, 90th percentile, share late, share cancelled, number of runs | The most direct evidence about this train | Stored |
 | F4 | Delays of the same line or route (all trains between the same endpoints), past 7 days, same summaries | More runs than F3 for regional lines with many trains a day | Stored |
 | F5 | Planned minutes from the train's first station to this one | Delay builds up along a route | Stored (planned time minus `trip_start`) |
@@ -87,9 +87,9 @@ predict arrivals there, not at small stations along the way.
 | # | Feature | Why we think it matters | Status |
 |---|---|---|---|
 | F22 | Weather forecast along the route: wind, heat over ~30 °C, snow and ice, heavy rain | Storms and heat cause much of the long tail | Later (Open-Meteo or DWD history; check that archived *forecasts* exist, not just observations) |
-| F23 | Construction work in force at the station or on the route | Planned works slow trains for weeks | **Gap**: construction messages (`t="h"`, `cat="BAUARBEITEN"`) carry validity dates `from` and `to`, which we don't store |
-| F24 | Cancellation already announced by the cutoff | A cancellation known the day before is an input, not a surprise; training must tell the two apart | **Gap**: cancellation time `clt` not stored. `stop_changes.observed_at` only gives when we first saw it |
-| F25 | Train diverted (changed path) | Diversions add minutes and skip stops | **Gap**: changed path `cpth` not stored |
+| F23 | Construction work in force at the station or on the route | Planned works slow trains for weeks | Stored since 2026-10-21: construction notices (`t="h"`, `cat="BAUARBEITEN"`) with `stop_messages.valid_from` and `valid_to` (D23) |
+| F24 | Cancellation already announced by the cutoff | A cancellation known the day before is an input, not a surprise; training must tell the two apart | Stored since 2026-10-21 (`arrival_cancelled_at`, `departure_cancelled_at`, D23). Before that, only `stop_changes.observed_at` |
+| F25 | Train diverted (changed path) | Diversions add minutes and skip stops | Stored since 2026-10-21 (`changed_route_before`, `changed_route_after`, D23) |
 | F26 | Strike announced | Strikes are announced days ahead | Later (a hand-kept list; news archives keep the dates) |
 
 ## Open questions for later

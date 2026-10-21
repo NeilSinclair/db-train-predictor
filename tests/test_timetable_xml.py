@@ -100,6 +100,8 @@ def test_plan_stop_through_train(plan):
     assert ice.departure.planned_time == berlin(2026, 10, 20, 20, 42)
     assert ice.arrival.planned_path.split("|")[0] == "Dresden Hbf"
     assert ice.arrival.changed_time is None
+    assert ice.arrival.cancelled_at is None and ice.arrival.changed_path is None
+    assert ice.operator == "80"  # DB Fernverkehr
     assert ice.has_train_details and not ice.is_s_bahn
 
 
@@ -137,6 +139,22 @@ def test_changes_cancellation(changes):
     assert ice_1119.arrival.changed_time is None
 
 
+def test_changes_cancellation_time_and_changed_path(changes):
+    ice_1119 = changes["-5207450347899841717-2610201800-5"]
+    rb_12 = changes["3203200605183773385-2610201947-1"]
+
+    assert ice_1119.arrival.cancelled_at == berlin(2026, 10, 20, 14, 43)
+    assert ice_1119.arrival.changed_path == ""  # sent empty, not left out
+    assert rb_12.departure.cancelled_at == berlin(2026, 10, 20, 19, 30)
+    path = rb_12.departure.changed_path.split("|")
+    assert (path[0], path[-1]) == ("Frankfurt-Höchst", "Königstein(Taunus)")
+
+
+def test_changes_operator_from_full_detail_entry(changes):
+    assert changes["-3019965818182152821-2610201821-4"].operator == "80"
+    assert changes["5031310367914604275-2610201224-1"].operator == "R4"
+
+
 def test_changes_reinstated_event_is_not_cancelled():
     xml = """<timetable station='X' eva='8000105'>
       <s id="1-2610201000-2"><ar ct="2610201005" cs="p" clt="2610200900"/></s>
@@ -154,6 +172,10 @@ def test_changes_messages_are_unique_and_keep_category(changes):
     [notice] = [m for m in re_4678.messages if m.type == "h"]
     assert notice.category == "BAUARBEITEN"
     assert notice.code is None
+    assert notice.valid_from == berlin(2026, 10, 14, 9, 28)
+    assert notice.valid_to == berlin(2026, 10, 25, 22, 0)  # after the clock change: CET
+    assert notice.valid_to.utcoffset().total_seconds() == 3600
+    assert notice.priority == 3
     ids = [m.message_id for m in ice_1554.messages]
     assert len(ids) == len(set(ids)) > 0
 

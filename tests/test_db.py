@@ -76,7 +76,7 @@ def test_database_path_defaults_and_can_be_overridden(monkeypatch):
 
 
 def test_new_database_starts_on_the_latest_schema_version(conn):
-    assert schema_version(conn) == len(MIGRATIONS) == 2
+    assert schema_version(conn) == len(MIGRATIONS) == 3
 
 
 def test_database_from_before_migrations_is_upgraded_without_losing_data():
