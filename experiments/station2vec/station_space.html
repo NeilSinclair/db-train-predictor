@@ -1,0 +1,480 @@
+<title>Station Space</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen map app. A header strip, then the station field with a detail panel beside it (stacked on phones). */
+:root {
+  --bg: #eef0ec;
+  --field: #f8f9f6;
+  --panel: #fbfcfa;
+  --ink: #16191a;
+  --ink-2: #4b5153;
+  --muted: #747b7d;
+  --line: #d6dad3;
+  --regional: #2a78d6;
+  --long: #eb6834;
+  --bus: #1baf7a;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --font-body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121414; --field: #181b1b; --panel: #1c1f1f; --ink: #eceeeb; --ink-2: #b6bcba;
+    --muted: #858c8a; --line: #2c3131; --regional: #3987e5; --long: #d95926; --bus: #199e70;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121414; --field: #181b1b; --panel: #1c1f1f; --ink: #eceeeb; --ink-2: #b6bcba;
+  --muted: #858c8a; --line: #2c3131; --regional: #3987e5; --long: #d95926; --bus: #199e70;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+* { box-sizing: border-box; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 32px; }
+.intro { max-width: 64ch; min-width: 0; display: grid; gap: 4px; }
+h1 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 2rem; line-height: 1; letter-spacing: 0.01em; text-wrap: balance; }
+.intro p { margin: 0; color: var(--ink-2); }
+.intro .meta { font-family: var(--font-data); font-size: 0.75rem; color: var(--muted); }
+
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; list-style: none; font-size: 0.85rem; color: var(--ink-2); }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.legend .n, .num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.legend .n { color: var(--muted); font-size: 0.75rem; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.dot.k0 { background: var(--regional); } .dot.k1 { background: var(--long); } .dot.k2 { background: var(--bus); }
+
+.search { display: flex; }
+.search input {
+  width: 15rem; max-width: 100%; font: inherit; font-size: 0.9rem; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px;
+}
+.search input:focus-visible, button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 2px; gap: 2px; }
+.seg button { font: 600 0.85rem var(--font-body); color: var(--ink-2); background: none; border: 0; border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; min-height: 0; }
+.field { position: relative; min-height: 0; min-width: 0; background: var(--field); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; display: block; }
+canvas.dragging { cursor: grabbing; }
+.hint { position: absolute; left: 12px; bottom: 10px; margin: 0; font-size: 0.75rem; color: var(--muted); pointer-events: none; }
+.zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; }
+.zoom button {
+  min-width: 34px; height: 32px; padding: 0 10px; font: 600 0.9rem var(--font-body); color: var(--ink);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+}
+.zoom button:hover { border-color: var(--muted); }
+
+.tip {
+  position: absolute; pointer-events: none; max-width: 260px; padding: 8px 10px; font-size: 0.8rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.12);
+}
+.tip b { display: block; font-family: var(--font-display); font-weight: 600; font-size: 1rem; }
+.tip span { color: var(--ink-2); }
+
+aside { min-height: 0; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; align-content: start; gap: 14px; }
+.eyebrow { margin: 0; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+aside h2 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; line-height: 1.05; overflow-wrap: anywhere; text-wrap: balance; }
+.trips { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: center; margin: 0; font-size: 0.85rem; }
+.trips dt { display: contents; }
+.trips dd { margin: 0; text-align: right; }
+.trips .label { color: var(--ink-2); }
+h3 { margin: 0; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+ol.near { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+ol.near button {
+  width: 100%; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; grid-template-rows: auto 3px; gap: 3px 8px; align-items: center;
+  padding: 6px 4px; font: inherit; font-size: 0.875rem; color: var(--ink); text-align: left; background: none; border: 0; border-radius: 4px; cursor: pointer;
+}
+ol.near button:hover { background: var(--field); }
+ol.near .nm { overflow-wrap: anywhere; }
+ol.near .num { font-size: 0.75rem; color: var(--ink-2); }
+ol.near .bar { grid-column: 2 / 4; height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+ol.near .bar i { display: block; height: 100%; background: var(--ink-2); border-radius: 2px; }
+.note { margin: 0; font-size: 0.78rem; color: var(--muted); }
+
+@media (max-width: 760px) {
+  html, body { height: auto; }
+  .app { height: auto; }
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .field { height: 62vh; min-height: 340px; }
+  .search input { width: 100%; }
+  .search { flex: 1 1 100%; }
+  .hint { display: none; }
+}
+</style>
+
+<div class="app">
+  <header>
+    <div class="intro">
+      <h1>Station Space</h1>
+      <p id="lede">Each dot is a station. Word2vec read every train trip as a sentence of station names, so stations served by the same trains end up close together. <span id="proj-note"></span></p>
+      <p class="meta" id="meta"></p>
+    </div>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="Projection">
+        <button type="button" id="mode-tsne" aria-pressed="true">t-SNE</button>
+        <button type="button" id="mode-pca" aria-pressed="false">PCA</button>
+      </div>
+      <ul class="legend" id="legend" aria-label="Colour shows the trains a station sees"></ul>
+      <div class="search">
+        <label class="sr" for="search">Find a station</label>
+        <input id="search" list="names" placeholder="Find a station" autocomplete="off">
+        <datalist id="names"></datalist>
+      </div>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="field" id="field">
+      <canvas id="map" aria-label="Scatter plot of station embeddings. Use the search box or the closest-stations list to explore by keyboard."></canvas>
+      <div class="tip" id="tip" hidden></div>
+      <p class="hint">Drag to pan, scroll or pinch to zoom, click a dot to select it</p>
+      <div class="zoom">
+        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
+        <button type="button" id="zoom-fit">Fit</button>
+      </div>
+    </div>
+
+    <aside aria-live="polite">
+      <div>
+        <p class="eyebrow">Selected station</p>
+        <h2 id="sel-name"></h2>
+      </div>
+      <dl class="trips" id="sel-trips"></dl>
+      <h3>Closest in vector space</h3>
+      <ol class="near" id="sel-near"></ol>
+      <p class="note">The number is cosine similarity between the two station vectors, where 1 means identical. Click a station to jump to it.</p>
+    </aside>
+  </div>
+</div>
+
+<script>
+const D = /*DATA*/null;
+const N = D.names.length;
+const KINDS = ["Regional", "Long-distance", "Mostly bus"];
+const total = D.kinds.map(k => k[0] + k[1] + k[2]);
+// A station counts as long-distance once a tenth of its trips are.
+const cls = D.kinds.map((k, i) => (k[1] / total[i] >= 0.1 ? 1 : k[2] / total[i] >= 0.5 ? 2 : 0));
+const radius = total.map(t => 1.8 + Math.sqrt(t) * 0.17);
+const byTrips = [...Array(N).keys()].sort((a, b) => total[b] - total[a]);
+const fmt = new Intl.NumberFormat("en-GB");
+
+const canvas = document.getElementById("map");
+const field = document.getElementById("field");
+const tip = document.getElementById("tip");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, dpr = 1;
+let view = { s: 1, tx: 0, ty: 0 }, base = 1;
+let selected = -1, hovered = -1, colors = {};
+let touched = false; // refit on resize until the viewer pans or zooms
+let X = D.proj.tsne.x, Y = D.proj.tsne.y;
+
+// --- header text -----------------------------------------------------------
+const when = iso => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+document.getElementById("meta").textContent =
+  `${fmt.format(D.meta.trips)} trips · ${fmt.format(N)} stations · collected ${when(D.meta.from)} – ${when(D.meta.to)} UTC`;
+
+const legend = document.getElementById("legend");
+KINDS.forEach((label, k) => {
+  const li = document.createElement("li");
+  const n = cls.filter(c => c === k).length;
+  li.innerHTML = `<span class="dot k${k}"></span><span></span><span class="n">${fmt.format(n)}</span>`;
+  li.children[1].textContent = k === 1 ? "Long-distance (≥10% of trips)" : label;
+  legend.append(li);
+});
+
+const datalist = document.getElementById("names");
+datalist.append(...byTrips.map(i => Object.assign(document.createElement("option"), { value: D.names[i] })));
+
+// --- theme -----------------------------------------------------------------
+function readTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = name => cs.getPropertyValue(name).trim();
+  colors = { field: v("--field"), ink: v("--ink"), ink2: v("--ink-2"), muted: v("--muted"), kind: [v("--regional"), v("--long"), v("--bus")] };
+  draw();
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readTheme);
+new MutationObserver(readTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+// --- view ------------------------------------------------------------------
+const toScreen = i => [X[i] * view.s + view.tx, -Y[i] * view.s + view.ty];
+
+function fit() {
+  const pad = 36;
+  const xs = X, ys = Y.map(y => -y);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  base = Math.min((W - 2 * pad) / (x1 - x0), (H - 2 * pad) / (y1 - y0));
+  view = { s: base, tx: W / 2 - ((x0 + x1) / 2) * base, ty: H / 2 - ((y0 + y1) / 2) * base };
+}
+
+function zoomAt(x, y, factor) {
+  const s = Math.min(base * 40, Math.max(base * 0.6, view.s * factor));
+  const f = s / view.s;
+  touched = true;
+  view = { s, tx: x - (x - view.tx) * f, ty: y - (y - view.ty) * f };
+  draw();
+}
+
+function centreOn(i) {
+  touched = true;
+  if (view.s < base * 3) view.s = base * 3;
+  view.tx = W / 2 - X[i] * view.s;
+  view.ty = H / 2 + Y[i] * view.s;
+}
+
+function resize() {
+  const r = field.getBoundingClientRect();
+  const first = W === 0;
+  const [oldW, oldH] = [W, H];
+  dpr = window.devicePixelRatio || 1;
+  W = r.width; H = r.height;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  if (first || !touched) fit(); else { view.tx += (W - oldW) / 2; view.ty += (H - oldH) / 2; }
+  draw();
+}
+new ResizeObserver(resize).observe(field);
+
+// --- drawing ---------------------------------------------------------------
+let frame = 0;
+function draw() { if (!frame) frame = requestAnimationFrame(render); }
+
+const widthCache = new Map();
+function labelWidth(i, size) {
+  const key = `${i}:${size}`;
+  if (!widthCache.has(key)) widthCache.set(key, ctx.measureText(D.names[i]).width);
+  return widthCache.get(key);
+}
+
+function render() {
+  frame = 0;
+  if (!W || !colors.kind) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const grow = Math.min(1.8, Math.sqrt(view.s / base));
+  const near = selected >= 0 ? new Set(D.near[selected].map(([j]) => j)) : null;
+
+  // Links from the selected station to its closest stations.
+  if (selected >= 0) {
+    const [sx, sy] = toScreen(selected);
+    ctx.strokeStyle = colors.ink2; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    for (const j of near) { const [x, y] = toScreen(j); ctx.moveTo(sx, sy); ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+
+  // Regional first, rarer kinds on top; dim everything else while a station is selected.
+  for (const k of [0, 2, 1]) {
+    ctx.fillStyle = colors.kind[k];
+    for (let i = 0; i < N; i++) {
+      if (cls[i] !== k) continue;
+      const [x, y] = toScreen(i);
+      const r = radius[i] * grow;
+      if (x < -r || y < -r || x > W + r || y > H + r) continue;
+      const focus = !near || i === selected || near.has(i);
+      ctx.globalAlpha = focus ? 0.9 : 0.22;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      if (r > 3) { ctx.strokeStyle = colors.field; ctx.lineWidth = 1; ctx.stroke(); }
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  for (const i of [selected, hovered]) {
+    if (i < 0) continue;
+    const [x, y] = toScreen(i);
+    ctx.strokeStyle = colors.ink; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, radius[i] * grow + 3, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  drawLabels(near, grow);
+}
+
+function drawLabels(near, grow) {
+  const placed = [];
+  const limit = Math.max(25, Math.min(260, Math.round(25 * (view.s / base) ** 1.3)));
+  const forced = selected >= 0 ? [selected, ...near] : [];
+  ctx.lineJoin = "round";
+  ctx.textBaseline = "middle";
+  const tryLabel = (i, strong) => {
+    const size = strong ? 14 : total[i] > 600 ? 13 : 11.5;
+    ctx.font = `${strong ? 700 : 600} ${size}px ${getFont()}`;
+    const [x, y] = toScreen(i);
+    const r = radius[i] * grow;
+    const w = labelWidth(i, `${size}${strong ? "b" : ""}`), h = size + 2;
+    const box = [x + r + 4, y - h / 2, x + r + 4 + w, y + h / 2];
+    if (box[2] < 0 || box[0] > W || box[3] < 0 || box[1] > H) return false;
+    if (placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) return false;
+    placed.push(box);
+    ctx.strokeStyle = colors.field; ctx.lineWidth = 3.5; ctx.strokeText(D.names[i], box[0], y);
+    ctx.fillStyle = near && !forced.includes(i) ? colors.muted : colors.ink;
+    ctx.fillText(D.names[i], box[0], y);
+    return true;
+  };
+  forced.forEach((i, n) => tryLabel(i, n === 0));
+  for (const i of byTrips) {
+    if (placed.length >= limit) break;
+    if (!forced.includes(i)) tryLabel(i, false);
+  }
+}
+let fontFamily = null;
+const getFont = () => fontFamily ??= getComputedStyle(document.body).getPropertyValue("--font-display");
+
+// --- selection panel -------------------------------------------------------
+function select(i, centre = false) {
+  selected = i;
+  if (centre) centreOn(i);
+  document.getElementById("sel-name").textContent = D.names[i];
+  const trips = document.getElementById("sel-trips");
+  trips.replaceChildren();
+  KINDS.forEach((label, k) => {
+    const dt = document.createElement("dt");
+    dt.innerHTML = `<span class="dot k${k}"></span><span class="label"></span>`;
+    dt.lastChild.textContent = k === 2 ? "Bus trips" : `${label} trips`;
+    const dd = Object.assign(document.createElement("dd"), { className: "num", textContent: fmt.format(D.kinds[i][k]) });
+    trips.append(dt, dd);
+  });
+  const list = document.getElementById("sel-near");
+  list.replaceChildren(...D.near[i].map(([j, sim]) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = `<span class="dot k${cls[j]}"></span><span class="nm"></span><span class="num">${sim.toFixed(2)}</span><span class="bar"><i style="width:${Math.max(0, sim) * 100}%"></i></span>`;
+    b.querySelector(".nm").textContent = D.names[j];
+    b.addEventListener("click", () => select(j, true));
+    li.append(b);
+    return li;
+  }));
+  draw();
+}
+
+// --- pointer input ---------------------------------------------------------
+function hit(x, y) {
+  const grow = Math.min(1.8, Math.sqrt(view.s / base));
+  let best = -1, bestD = Infinity;
+  for (let i = 0; i < N; i++) {
+    const [px, py] = toScreen(i);
+    const d = Math.hypot(px - x, py - y);
+    if (d < Math.max(8, radius[i] * grow + 4) && d < bestD) { best = i; bestD = d; }
+  }
+  return best;
+}
+
+function showTip(i, x, y) {
+  if (i < 0) { tip.hidden = true; return; }
+  const k = D.kinds[i];
+  const ld = Math.round((100 * k[1]) / total[i]);
+  tip.innerHTML = "<b></b><span></span>";
+  tip.firstChild.textContent = D.names[i];
+  tip.lastChild.textContent = `${fmt.format(total[i])} trips, ${ld}% long-distance. Closest: ${D.near[i].slice(0, 3).map(([j]) => D.names[j]).join(", ")}`;
+  tip.hidden = false;
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  tip.style.left = `${Math.min(W - tw - 8, x + 14)}px`;
+  tip.style.top = `${y + 14 + th > H ? y - th - 10 : y + 14}px`;
+}
+
+const pointers = new Map();
+let moved = false, pinch = null;
+canvas.addEventListener("pointerdown", e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+  moved = pointers.size > 1;
+  pinch = null;
+  canvas.classList.add("dragging");
+});
+canvas.addEventListener("pointermove", e => {
+  const p = pointers.get(e.pointerId);
+  if (!p) {
+    const i = hit(e.offsetX, e.offsetY);
+    if (i !== hovered) { hovered = i; draw(); }
+    showTip(i, e.offsetX, e.offsetY);
+    return;
+  }
+  if (pointers.size === 1) {
+    const dx = e.offsetX - p.x, dy = e.offsetY - p.y;
+    if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
+    view.tx += dx; view.ty += dy;
+    touched = true;
+    p.x = e.offsetX; p.y = e.offsetY;
+    tip.hidden = true;
+    draw();
+  } else if (pointers.size === 2) {
+    p.x = e.offsetX; p.y = e.offsetY;
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    if (pinch) { view.tx += mx - pinch.mx; view.ty += my - pinch.my; zoomAt(mx, my, d / pinch.d); }
+    pinch = { d, mx, my };
+  }
+});
+const release = e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  pinch = null;
+  if (!pointers.size) {
+    canvas.classList.remove("dragging");
+    if (!moved && e.type === "pointerup") {
+      const i = hit(e.offsetX, e.offsetY);
+      if (i >= 0) select(i);
+    }
+  }
+};
+canvas.addEventListener("pointerup", release);
+canvas.addEventListener("pointercancel", release);
+canvas.addEventListener("pointerleave", () => { if (hovered >= 0) { hovered = -1; draw(); } tip.hidden = true; });
+canvas.addEventListener("wheel", e => { e.preventDefault(); zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+
+document.getElementById("zoom-in").addEventListener("click", () => zoomAt(W / 2, H / 2, 1.5));
+document.getElementById("zoom-out").addEventListener("click", () => zoomAt(W / 2, H / 2, 1 / 1.5));
+document.getElementById("zoom-fit").addEventListener("click", () => { fit(); touched = false; draw(); });
+
+const search = document.getElementById("search");
+function findStation() {
+  const q = search.value.trim().toLowerCase();
+  if (!q) return;
+  const i = D.names.findIndex(n => n.toLowerCase() === q);
+  const j = i >= 0 ? i : byTrips.find(k => D.names[k].toLowerCase().includes(q));
+  if (j !== undefined && j >= 0) select(j, true);
+}
+search.addEventListener("change", findStation);
+search.addEventListener("keydown", e => { if (e.key === "Enter") findStation(); });
+
+// --- projection ------------------------------------------------------------
+const NOTES = {
+  tsne: "Positions come from t-SNE: nearby dots are similar, while the gaps between clusters carry little meaning.",
+  pca: `Positions come from PCA, a flat projection onto the two directions the vectors vary most along. Distances are honest, but these two directions hold only ${Math.round(D.meta.pca_share * 100)}% of the variance, so most stations pile up near the middle.`,
+};
+function setProjection(mode) {
+  X = D.proj[mode].x; Y = D.proj[mode].y;
+  for (const m of ["tsne", "pca"]) document.getElementById(`mode-${m}`).setAttribute("aria-pressed", String(m === mode));
+  document.getElementById("proj-note").textContent = NOTES[mode];
+  if (W) fit();
+  touched = false;
+  draw();
+}
+document.getElementById("mode-tsne").addEventListener("click", () => setProjection("tsne"));
+document.getElementById("mode-pca").addEventListener("click", () => setProjection("pca"));
+
+// --- start -----------------------------------------------------------------
+setProjection(location.hash === "#pca" ? "pca" : "tsne");
+readTheme();
+select(byTrips[0]);
+document.fonts?.ready.then(() => { widthCache.clear(); draw(); });
+</script>

@@ -344,3 +344,20 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
   collector's database.
 - **Leaning:** on the VPS, as its own compose service behind HTTPS, called
   by the frontend from wherever that's hosted.
+
+## D21. Side experiments live in `experiments/`
+- **Date:** 2026-10-21
+- **Status:** Accepted
+- **Context:** A for-fun experiment, station2vec: word2vec on train routes,
+  treating each station as a word, to see what the vectors learn. It needs
+  gensim and scikit-learn, which the collector doesn't.
+- **Decision:** Experiments go in `experiments/<name>/` with their tests next
+  to them, and their dependencies in a dependency group of their own (here
+  `station2vec`), so `uv sync --no-dev` and the collector image skip them. They
+  run on a snapshot of the database copied off the VPS, never on the live file.
+- **Findings (first day of data, 20,123 trips, 3,402 stations):** t-SNE
+  separates the stations into regional networks that match geography, and
+  the nearest stations follow real lines (Frankfurt's are Montabaur and
+  Limburg Süd, on the Köln–Frankfurt high-speed line). The first two PCA
+  components hold only 8% of the variance, and the first mostly separates
+  stations with long-distance trains from regional ones.

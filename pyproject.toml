@@ -24,3 +24,7 @@ build-backend = "uv_build"
 dev = [
     "pytest>=9.1.1",
 ]
+station2vec = [
+    "gensim>=4.4.0",
+    "scikit-learn>=1.9.1",
+]
