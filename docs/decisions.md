@@ -344,3 +344,30 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
   collector's database.
 - **Leaning:** on the VPS, as its own compose service behind HTTPS, called
   by the frontend from wherever that's hosted.
+
+## D22. What the model predicts, and from which features
+- **Date:** 2026-10-21
+- **Status:** Open (target decided; features are hypotheses until EDA)
+- **Decided:** The model answers "how late will the train I'm taking
+  tomorrow be?", a day or more ahead. Predicting a train already running
+  (live delay) is out of scope: no value in it for us.
+- **Decided: delay bands, not one number.** The target is the arrival at
+  the station where you get off, as one of: on time (under 6 min, DB's
+  definition), 6–15, 15–30, 30–60, 60+ minutes, or cancelled. A
+  classifier gives a probability per band, from which P(late) and an
+  expected delay follow.
+- **Why bands:** a day ahead, most of what makes a train late (a fault, a
+  signal failure, someone on the tracks) hasn't happened yet, so even
+  with perfect features the outcome stays spread out: usually on time,
+  sometimes very late. A single number, the conditional mean, describes
+  that badly and is pulled around by rare long delays. Bands also give
+  cancellation a place. To be checked in EDA: if a plain regression's
+  errors turn out narrow, revisit.
+- **Consequence:** Every feature must be known a day ahead. In training,
+  features for a stop are computed only from data before a cutoff (e.g.
+  24 h before its planned time), so the model never sees what it couldn't
+  know then.
+- **Features:** the hypotheses, and whether we collect what each needs,
+  are kept in [features.md](features.md). We test them with EDA once
+  there's enough data (about four weeks).
+- **Note:** D21 is the station2vec experiment, on its own branch.

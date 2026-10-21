@@ -85,6 +85,14 @@ Hetzner Storage Box, then the checks under "After it has run for a while".
   collector writes; copying the file directly isn't, in WAL mode. Keep a
   few days of copies, and test a restore.
 
+**Close the collection gaps from [features.md](features.md)** (D22). DB
+doesn't keep these, so each day without them is lost:
+- [ ] Construction messages' validity dates (`from`, `to`) and priority
+  (`pr`) on `stop_messages` (F23).
+- [ ] Cancellation time (`clt`) on stops and changes (F24).
+- [ ] Operator (`tl o`) on stops (F2), and changed path (`cpth`) for
+  diversions (F25).
+
 **After it has run for a while:**
 - [ ] After day one, measure database growth against the ~10 GB/year
   estimate (D11) and check free disk space. The 5-minute live run stored
@@ -95,6 +103,12 @@ Hetzner Storage Box, then the checks under "After it has run for a while".
 - [ ] The deleted-message (`del`) check from step 3's list, on real data.
 
 ### Later
+- [ ] **EDA, about mid-November 2026** (four weeks of data): test the
+  feature hypotheses in [features.md](features.md); check that stops with
+  no changed time really ran on time; compare delay bands with a plain
+  regression (D22).
+- [ ] Check whether `/plan` returns tomorrow's hours, and whether
+  Open-Meteo keeps archived forecasts (features.md, open questions).
 - [ ] Decide where the prediction API runs (D20), planned for 2026-10-21.
 - [ ] Set up training as in D19: `model/` workspace member, `trainer`
   compose service with a profile and CPU/memory limits, trained from the
