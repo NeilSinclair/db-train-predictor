@@ -83,10 +83,12 @@ runs (D20), and the checks under "After it has run for a while".
   (migration 2, D18).
 - [x] D18 deployed to the VPS (one last full plan backfill, since earlier
   fetches weren't recorded).
-- [ ] **Nightly backup to the Hetzner Storage Box.** Use SQLite's online
-  backup (`sqlite3 <db> ".backup <file>"`), which is safe while the
-  collector writes; copying the file directly isn't, in WAL mode. Keep a
-  few days of copies, and test a restore.
+- [x] Nightly backup scripts (D24, `deploy/backup/`), tested locally.
+- [ ] **Run `sudo deploy/backup/install.sh <user>` on the VPS** (needs the
+  Storage Box with SSH support on, and its password), then check the first
+  backup and the restore test. See [deployment.md](deployment.md#backups).
+- [ ] Later: an alert when a backup fails (e.g. a healthchecks.io ping),
+  since today a failure only shows in `systemctl --failed`.
 
 **Close the collection gaps from [features.md](features.md)** (D22). DB
 doesn't keep these, so each day without them is lost:

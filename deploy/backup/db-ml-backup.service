@@ -1,0 +1,12 @@
+[Unit]
+Description=Back up the db-ml collector database to the Storage Box (D24)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/db-ml-backup.env
+ExecStart=/usr/local/sbin/db-ml-backup
+# Stay out of the collector's way.
+Nice=10
+IOSchedulingClass=idle

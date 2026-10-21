@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly db-ml backup to the Storage Box (D24)
+
+[Timer]
+# VPS local time. Persistent runs a missed backup after the VPS was down.
+OnCalendar=*-*-* 03:30
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

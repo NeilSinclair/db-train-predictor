@@ -74,6 +74,55 @@ collector runs, then `docker compose restart` so it picks up the new EVAs.
 
 ## Backups
 
-Not set up yet (see [todo.md](todo.md)). Plan: a nightly SQLite online
-backup (`sqlite3 <db> ".backup <file>"`, safe while the collector writes)
-copied to a Hetzner Storage Box.
+Every night at 03:30 a systemd timer takes a consistent copy of the
+database, checks it, and stores it in a Borg repository on our Hetzner
+Storage Box (D24). Kept: 14 daily, 8 weekly, 12 monthly archives.
+
+| What | Where |
+|---|---|
+| Latest checked copy (training reads this, D19) | `/var/lib/db-ml-backup/db_ml.sqlite` |
+| Scripts and units (sources in `deploy/backup/`) | `/usr/local/sbin/db-ml-backup`, `/usr/local/sbin/db-ml-backup-check`, `/etc/systemd/system/db-ml-backup.{service,timer}` |
+| Settings (repository, SSH key) | `/etc/db-ml-backup.env`, `chmod 600` |
+| SSH key for the Storage Box | `/root/.ssh/storagebox_ed25519` |
+| Repository | `ssh://<user>@<user>.your-storagebox.de:23/./db-ml` |
+
+### Setting it up
+
+1. In the Hetzner Console, open the Storage Box and turn on **SSH
+   support** (and **external reachability**). Note its user, e.g.
+   `u123456`, and its password.
+2. On the VPS, from an interactive terminal:
+   ```sh
+   cd /opt/db-ml && git pull
+   sudo deploy/backup/install.sh u123456
+   ```
+   It installs Borg, creates an SSH key and asks for the Storage Box
+   password once to add the key, creates the repository, enables the
+   timer, runs the first backup and then the restore test.
+
+Run `install.sh` again after changing anything in `deploy/backup/`; it
+keeps the key, settings and repository.
+
+### Everyday commands
+
+```sh
+systemctl list-timers db-ml-backup.timer        # when's the next one?
+journalctl -u db-ml-backup --since yesterday    # how did the last one go?
+sudo systemctl start db-ml-backup               # back up now
+sudo db-ml-backup-check                         # restore test
+```
+
+### Restoring
+
+```sh
+sudo -i
+set -a; . /etc/db-ml-backup.env; set +a
+borg list                                       # pick an archive
+cd /tmp && borg extract ::db_ml-2026-10-22T03:30
+# The file is at /tmp/var/lib/db-ml-backup/db_ml.sqlite. To put it back:
+cd /opt/db-ml && docker compose stop
+cp /tmp/var/lib/db-ml-backup/db_ml.sqlite /var/lib/db-ml/db_ml.sqlite
+rm -f /var/lib/db-ml/db_ml.sqlite-wal /var/lib/db-ml/db_ml.sqlite-shm
+chown 10001:10001 /var/lib/db-ml/db_ml.sqlite
+docker compose start
+```

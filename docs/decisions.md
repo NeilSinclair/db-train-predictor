@@ -396,3 +396,39 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
   the next time they're seen. Messages are still stored once per stop
   (`INSERT OR IGNORE`), so a notice whose validity DB later extends keeps
   its first dates on that stop; new stops get the new dates.
+
+## D24. Nightly backup to a Hetzner Storage Box with Borg
+- **Date:** 2026-10-21
+- **Status:** Accepted (scripts written; waiting for the one-time install
+  on the VPS)
+- **Context:** The database exists only on the VPS disk. A consistent copy
+  of a SQLite database in WAL mode can't be taken by copying the file while
+  the collector writes. Training should read a copy, not the live file
+  (D19).
+- **Decision:**
+  - Every night at 03:30 (VPS local time), a root systemd timer runs
+    `deploy/backup/db-ml-backup.sh`: SQLite's online backup (`.backup`,
+    which is consistent while the collector writes) into
+    `/var/lib/db-ml-backup/db_ml.sqlite`, then `PRAGMA integrity_check`.
+    Only a copy that passes replaces the previous one. That copy is the
+    file training reads (D19).
+  - The copy goes into a BorgBackup repository on the Storage Box, over
+    SSH on port 23, with zstd compression. Borg deduplicates, so a full
+    copy every night only uploads what changed; that's why it's `.backup`,
+    which keeps SQLite's page layout, and not `VACUUM INTO`, which
+    rewrites every page.
+  - Kept: 14 daily, 8 weekly and 12 monthly archives.
+  - Not encrypted: the data is public timetable data, and a lost
+    passphrase would make every backup useless.
+  - SQLite runs as the collector's user (10001), so it never leaves
+    root-owned files next to the live database.
+  - `db-ml-backup-check` is the restore test: it extracts the newest
+    archive to a temporary folder, checks its integrity and prints row
+    counts.
+- **Why Borg over plain rsync of dated files:** keeping weeks of history
+  costs little more than one copy, and it does compression, retention and
+  checks itself. Hetzner supports it on Storage Boxes.
+- **Consequences:** Setting it up needs root on the VPS and the Storage
+  Box password once (`deploy/backup/install.sh`), so the user runs it.
+  Failures show in `systemctl --failed` and the journal; nothing alerts
+  yet.
