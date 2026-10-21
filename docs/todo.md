@@ -10,9 +10,9 @@ runs 24/7 in Docker on the Hetzner VPS since 2026-10-20 ~20:52 (D16,
 target and feature hypotheses are written down (D22,
 [features.md](features.md)), and the collector stores everything they
 need (D23). Nightly backups to the Hetzner Storage Box run since
-2026-10-21 (D24). **Next:** keep collecting until EDA in mid-November;
-meanwhile where the prediction API runs (D20), and the checks under
-"After it has run for a while".
+2026-10-21 (D24). The prediction API will run locally in Docker for now
+(D20). **Next:** keep collecting until EDA in mid-November; meanwhile the
+checks under "After it has run for a while".
 
 ## Done 2026-10-20 (from the code review)
 
@@ -114,7 +114,8 @@ doesn't keep these, so each day without them is lost:
   regression (D22).
 - [ ] Check whether `/plan` returns tomorrow's hours, and whether
   Open-Meteo keeps archived forecasts (features.md, open questions).
-- [ ] Decide where the prediction API runs (D20), planned for 2026-10-21.
+- [x] Where the prediction API runs (D20): locally in Docker for now; the
+  cloud once the model has been tuned.
 - [ ] Set up training as in D19: `model/` workspace member, `trainer`
   compose service with a profile and CPU/memory limits, trained from the
   nightly backup copy.

@@ -337,13 +337,23 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
 - **Consequences:** Where the prediction API runs is still open (D20).
 
 ## D20. Where the prediction API runs
-- **Date:** 2026-10-20
-- **Status:** Open (to discuss on 2026-10-21)
+- **Date:** 2026-10-20, decided 2026-10-21
+- **Status:** Accepted
 - **Context:** The frontend will be hosted elsewhere, not on the VPS (D19).
-  The prediction API needs the trained model and live delays from the
+  The prediction API needs the trained model and recent delays from the
   collector's database.
-- **Leaning:** on the VPS, as its own compose service behind HTTPS, called
-  by the frontend from wherever that's hosted.
+- **Earlier leaning:** on the VPS, as its own compose service behind HTTPS.
+- **Decision:** For now the API runs locally, in a Docker container on the
+  laptop. We decide where it runs in the cloud once there's enough data
+  and the model has been tuned (D22).
+- **Consequences:**
+  - The model is trained on the VPS (D19) and copied to the laptop.
+  - Its features need recent delays (7- and 28-day windows, D22), so the
+    API reads a database copy brought over from the VPS, e.g. the
+    nightly backup copy (D24). Predictions are only as fresh as that copy.
+  - If the API fetches tomorrow's `/plan` itself, it shares the DB API
+    rate limit with the collector, which already uses ~57 of its 60
+    requests a minute. That needs a plan before the API makes live calls.
 
 ## D22. What the model predicts, and from which features
 - **Date:** 2026-10-21
