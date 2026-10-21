@@ -380,6 +380,25 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
 - **Features:** the hypotheses, and whether we collect what each needs,
   are kept in [features.md](features.md). We test them with EDA once
   there's enough data (about four weeks).
+- **Calibration plan (2026-10-21):** the band probabilities are what users
+  read, so they must be calibrated:
+  - Freeze the classifier and fit `p = softmax(z / T + b)` on its raw
+    per-band scores `z` (LightGBM: `predict(..., raw_score=True)`): one
+    temperature `T` plus one bias per band, 7 parameters, by minimising
+    log loss. Plain temperature scaling only fixes overall over- or
+    under-confidence; the biases also correct drifting base rates (a
+    stormy week, construction season, a strike).
+  - Split by time, never at random, since the same train on neighbouring
+    days would land on both sides: e.g. weeks 1–6 train the model, week 7
+    fits `T` and `b`, week 8 is the untouched test. The calibration week
+    comes after the training weeks.
+  - Refit `T` and `b` on the latest week regularly (seconds, no
+    retraining) to follow drift, e.g. weekly after the nightly backup.
+  - Check with reliability diagrams per band and for the combined numbers
+    users see (P(6+ min late) is a sum of bands), plus log loss and Brier
+    score before and after.
+  - The rare bands (60+, cancelled) have few examples per week: fit on two
+    or three weeks pooled, or keep their biases close to zero.
 - **Note:** D21 is the station2vec experiment, on its own branch.
 
 ## D23. Store the attributes the feature list needs (migration 3)
