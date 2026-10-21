@@ -76,7 +76,8 @@ collector runs, then `docker compose restart` so it picks up the new EVAs.
 
 Every night at 03:30 a systemd timer takes a consistent copy of the
 database, checks it, and stores it in a Borg repository on our Hetzner
-Storage Box (D24). Kept: 14 daily, 8 weekly, 12 monthly archives.
+Storage Box (D24). Kept: 14 daily, 8 weekly, 12 monthly archives. Running
+since 2026-10-21; the first backup and restore test passed.
 
 | What | Where |
 |---|---|
@@ -88,9 +89,11 @@ Storage Box (D24). Kept: 14 daily, 8 weekly, 12 monthly archives.
 
 ### Setting it up
 
-1. In the Hetzner Console, open the Storage Box and turn on **SSH
-   support** (and **external reachability**). Note its user, e.g.
-   `u123456`, and its password.
+1. In the Hetzner Console, open the Storage Box, turn on **SSH support**
+   and **external reachability** (needed even from our Hetzner Cloud VPS),
+   and set a password. Note its user, e.g. `u123456`. The password is only
+   needed during setup; keep it in a password manager, not in the `.env`
+   that goes to the VPS.
 2. On the VPS, from an interactive terminal:
    ```sh
    cd /opt/db-ml && git pull

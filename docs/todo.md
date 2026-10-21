@@ -9,9 +9,10 @@ runs 24/7 in Docker on the Hetzner VPS since 2026-10-20 ~20:52 (D16,
 [deployment.md](deployment.md)); restarts are cheap since D18. The model
 target and feature hypotheses are written down (D22,
 [features.md](features.md)), and the collector stores everything they
-need (D23). **Next:** keep collecting until EDA in mid-November; meanwhile
-the nightly backup to the Hetzner Storage Box, where the prediction API
-runs (D20), and the checks under "After it has run for a while".
+need (D23). Nightly backups to the Hetzner Storage Box run since
+2026-10-21 (D24). **Next:** keep collecting until EDA in mid-November;
+meanwhile where the prediction API runs (D20), and the checks under
+"After it has run for a while".
 
 ## Done 2026-10-20 (from the code review)
 
@@ -84,9 +85,8 @@ runs (D20), and the checks under "After it has run for a while".
 - [x] D18 deployed to the VPS (one last full plan backfill, since earlier
   fetches weren't recorded).
 - [x] Nightly backup scripts (D24, `deploy/backup/`), tested locally.
-- [ ] **Run `sudo deploy/backup/install.sh <user>` on the VPS** (needs the
-  Storage Box with SSH support on, and its password), then check the first
-  backup and the restore test. See [deployment.md](deployment.md#backups).
+- [x] Backup installed on the VPS (2026-10-21); the first backup and the
+  restore test passed. See [deployment.md](deployment.md#backups).
 - [ ] Later: an alert when a backup fails (e.g. a healthchecks.io ping),
   since today a failure only shows in `systemctl --failed`.
 

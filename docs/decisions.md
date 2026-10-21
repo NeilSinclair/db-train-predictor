@@ -399,8 +399,7 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
 
 ## D24. Nightly backup to a Hetzner Storage Box with Borg
 - **Date:** 2026-10-21
-- **Status:** Accepted (scripts written; waiting for the one-time install
-  on the VPS)
+- **Status:** Accepted (running on the VPS since 2026-10-21)
 - **Context:** The database exists only on the VPS disk. A consistent copy
   of a SQLite database in WAL mode can't be taken by copying the file while
   the collector writes. Training should read a copy, not the live file
@@ -430,5 +429,7 @@ Statuses: **Accepted** (decided), **Open** (being discussed, not decided yet),
   checks itself. Hetzner supports it on Storage Boxes.
 - **Consequences:** Setting it up needs root on the VPS and the Storage
   Box password once (`deploy/backup/install.sh`), so the user runs it.
+  The Storage Box needs SSH support and external reachability turned on,
+  even though the VPS is at Hetzner too (found during setup).
   Failures show in `systemctl --failed` and the journal; nothing alerts
   yet.
